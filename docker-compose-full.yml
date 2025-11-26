@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Chatbot Service
+  # ==========================================================================
+  chatbot:
+    build:
+      context: ./chatbot
+      dockerfile: Dockerfile
+    image: chatbot:latest
+    container_name: chatbot
+    hostname: chatbot
+    depends_on:
+      - thruk-mcp
+    ports:
+      - "8000:8080"
+    networks:
+      - mcp-network
+    volumes:
+      - ./chatbot/chatbot.json:/app/chatbot.json:ro,z
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================================
+  # Thruk MCP Server
+  # ==========================================================================
+  thruk-mcp:
+    build:
+      context: ./thruk_mcp
+      dockerfile: Dockerfile
+    image: thruk-mcp:latest
+    container_name: thruk-mcp
+    hostname: thruk-mcp
+    ports:
+      - "8001:8001"
+    networks:
+      - mcp-network
+    env_file:
+      - .env
+    environment:
+      - MCP_SERVER_PORT=8001
+    restart: unless-stopped
+    # Health check disabled - FastMCP streamable HTTP doesn't expose /health
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 10s
+
+networks:
+  mcp-network:
+    name: mcp-network
+    driver: bridge
