@@ -1,0 +1,65 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+env/
+
+# Documentation & Specs
+README.md
+specs/
+.specify/
+.claude/
+*.md
+!quickstart.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & Testing
+*.log
+logs/
+tests/
+pytest_cache/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+kubernetes*.yaml
+k8s*.yaml
+.dockerignore
+
+# Temporary
+*.tmp
+*.temp
+tmp/
