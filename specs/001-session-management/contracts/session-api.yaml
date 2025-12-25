@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: Chatbot Session Management API
+  description: Session management endpoints for authenticated user sessions with timeout handling
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: http://localhost:30800
+    description: Kubernetes (NodePort)
+
+paths:
+  /:
+    get:
+      summary: Initialize session and load chatbot UI
+      description: |
+        Creates a new session for the authenticated user (from X-WEBAUTH-USER header or default "chatuser").
+        Returns HTML page with username displayed and session cookie set.
+      parameters:
+        - name: X-WEBAUTH-USER
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Username from Apache basic auth (production). Defaults to "chatuser" if absent.
+      responses:
+        '200':
+          description: Chatbot UI loaded successfully
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: session_id=Xy7k9Pm...; HttpOnly; SameSite=Lax
+          content:
+            text/html:
+              schema:
+                type: string
+              example: |
+                <!DOCTYPE html>
+                <html>
+                <body>
+                  <div class="user-info">Logged in as: alice</div>
+                  ...
+                </body>
+                </html>
+
+  /api/session/heartbeat:
+    post:
+      summary: Reset session inactivity timer
+      description: |
+        Updates last_activity timestamp for the session, resetting the 15-minute timeout.
+        Called on any user interaction (typing, clicking, submitting).
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Session activity updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                  username:
+                    type: string
+                  last_activity:
+                    type: string
+                    format: date-time
+                  expires_in_seconds:
+                    type: integer
+                    description: Time until session expires
+              example:
+                session_id: "Xy7k9Pm..."
+                username: "alice"
+                last_activity: "2025-12-16T10:15:00Z"
+                expires_in_seconds: 900
+        '401':
+          description: Session expired or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionExpiredError'
+
+  /api/chat:
+    post:
+      summary: Send chat message to LLM
+      description: |
+        Sends user message to LLM API, invokes Thruk MCP tools if needed (passing username),
+        and returns assistant response. Updates session activity timestamp.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: User's chat message
+              required:
+                - message
+            example:
+              message: "Show me all hosts in the database hostgroup"
+      responses:
+        '200':
+          description: Chat response from LLM
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                    description: Assistant's response
+                  tool_calls:
+                    type: array
+                    description: MCP tools invoked (if any)
+                    items:
+                      type: object
+                      properties:
+                        tool_name:
+                          type: string
+                        parameters:
+                          type: object
+              example:
+                response: "Here are the hosts in the database hostgroup: db01, db02, db03"
+                tool_calls:
+                  - tool_name: "thruk_list_hosts"
+                    parameters:
+                      username: "alice"
+                      hostgroup: "database"
+        '401':
+          description: Session expired or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionExpiredError'
+        '500':
+          description: LLM API or MCP server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: string
+
+  /api/session/status:
+    get:
+      summary: Check session status
+      description: |
+        Returns current session information including expiration status.
+        Used by frontend to detect timeouts and show timeout message.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Session is active
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: string
+                  username:
+                    type: string
+                  is_active:
+                    type: boolean
+                  expires_in_seconds:
+                    type: integer
+              example:
+                session_id: "Xy7k9Pm..."
+                username: "alice"
+                is_active: true
+                expires_in_seconds: 450
+        '401':
+          description: Session expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionExpiredError'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session_id
+
+  schemas:
+    SessionExpiredError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "session_expired"
+        message:
+          type: string
+          example: "Session has ended after inactivity"
+        expired_at:
+          type: string
+          format: date-time
+          example: "2025-12-16T10:15:00Z"
+      required:
+        - error
+        - message
