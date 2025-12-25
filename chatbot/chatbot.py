@@ -44,8 +44,11 @@ session_store = SessionStore(
     cleanup_interval_seconds=SESSION_CLEANUP_INTERVAL
 )
 
-# Templates
-templates = Jinja2Templates(directory="templates")
+# Templates - support both local and containerized environments
+import pathlib
+_current_dir = pathlib.Path(__file__).parent
+_templates_dir = _current_dir / "templates"
+templates = Jinja2Templates(directory=str(_templates_dir))
 
 
 async def cleanup_sessions_background():
@@ -396,8 +399,8 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "chatbot:app",
-        host="0.0.0.0",
-        port=8000,
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8000")),
         reload=True,
         log_level="info"
     )

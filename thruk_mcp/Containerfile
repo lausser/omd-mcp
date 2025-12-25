@@ -1,0 +1,63 @@
+# =============================================================================
+# Stage 1: Builder - Install dependencies
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install system dependencies for building Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+
+# Create virtual environment and install dependencies
+RUN python -m venv /build/venv && \
+    /build/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /build/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# =============================================================================
+# Stage 2: Runtime - Minimal production image
+# =============================================================================
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r -g 1001 thruk-mcp && \
+    useradd -r -u 1001 -g thruk-mcp -m -s /bin/bash thruk-mcp
+
+# Set working directory
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder --chown=thruk-mcp:thruk-mcp /build/venv /app/venv
+
+# Copy application code
+COPY --chown=thruk-mcp:thruk-mcp *.py /app/thruk_mcp/
+COPY --chown=thruk-mcp:thruk-mcp __init__.py /app/thruk_mcp/__init__.py
+
+# Set environment variables
+ENV PATH="/app/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    PORT=8001 \
+    HOST=0.0.0.0
+
+# Expose port
+EXPOSE 8001
+
+# Health check (check if SSE endpoint is accessible)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/sse -H "Accept: text/event-stream" --max-time 2 || exit 1
+
+# Switch to non-root user
+USER thruk-mcp
+
+# Run the application
+CMD ["sh", "-c", "python -m thruk_mcp.thruk_mcp --listen ${PORT} --host ${HOST}"]

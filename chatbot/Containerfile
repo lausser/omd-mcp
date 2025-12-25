@@ -1,0 +1,64 @@
+# =============================================================================
+# Stage 1: Builder - Install dependencies
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install system dependencies for building Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better layer caching
+COPY requirements.txt .
+
+# Create virtual environment and install dependencies
+RUN python -m venv /build/venv && \
+    /build/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /build/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# =============================================================================
+# Stage 2: Runtime - Minimal production image
+# =============================================================================
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r -g 1000 chatbot && \
+    useradd -r -u 1000 -g chatbot -m -s /bin/bash chatbot
+
+# Set working directory
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder --chown=chatbot:chatbot /build/venv /app/venv
+
+# Copy application code
+COPY --chown=chatbot:chatbot *.py /app/chatbot/
+COPY --chown=chatbot:chatbot templates /app/chatbot/templates/
+COPY --chown=chatbot:chatbot __init__.py /app/chatbot/__init__.py
+
+# Set environment variables
+ENV PATH="/app/venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000 \
+    HOST=0.0.0.0
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Switch to non-root user
+USER chatbot
+
+# Run the application
+CMD ["sh", "-c", "/app/venv/bin/python -m uvicorn chatbot.chatbot:app --host ${HOST} --port ${PORT}"]

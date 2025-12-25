@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Thruk MCP Server - Monitoring API Integration
+  # =============================================================================
+  thruk-mcp:
+    build:
+      context: ./thruk_mcp
+      dockerfile: Containerfile
+    container_name: thruk-mcp
+    hostname: thruk-mcp
+    restart: unless-stopped
+
+    ports:
+      - "8001:8001"
+
+    environment:
+      # Thruk API Configuration
+      THRUK_API_KEY: ${THRUK_API_KEY}
+      THRUK_BASE_URL: ${THRUK_BASE_URL}
+      THRUK_AUTH_USER: ${THRUK_AUTH_USER:-}
+      THRUK_VERIFY_SSL: ${THRUK_VERIFY_SSL:-true}
+
+      # Server Configuration
+      HOST: "0.0.0.0"
+      PORT: "8001"
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+    networks:
+      - mcp-internal
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
+  # Chatbot Service - User Interface and Session Management
+  # =============================================================================
+  chatbot:
+    build:
+      context: ./chatbot
+      dockerfile: Containerfile
+    container_name: chatbot
+    hostname: chatbot
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      # Server Configuration
+      HOST: "0.0.0.0"
+      PORT: "8000"
+
+      # Session Management
+      SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-15}
+      DEFAULT_USERNAME: ${DEFAULT_USERNAME:-chatuser}
+      SESSION_CLEANUP_INTERVAL_SECONDS: ${SESSION_CLEANUP_INTERVAL_SECONDS:-60}
+
+      # LLM API Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4}
+
+      # MCP Server URL (internal network)
+      MCP_SERVER_URL: http://thruk-mcp:8001
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+    depends_on:
+      - thruk-mcp
+
+    networks:
+      - mcp-internal
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  mcp-internal:
+    driver: bridge
+    name: mcp-internal

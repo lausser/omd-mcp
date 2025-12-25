@@ -1,0 +1,8 @@
+# MCP SDK
+fastmcp>=0.2.0
+
+# HTTP Client for Thruk API
+httpx>=0.26.0
+
+# Environment configuration
+python-dotenv>=1.0.0
