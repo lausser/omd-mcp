@@ -1,0 +1,81 @@
+---
+# Ansible Playbook: Install Chatbot and Thruk MCP into OMD Version
+#
+# This playbook installs both the chatbot and Thruk MCP server as system-wide OMD components.
+# Run as root on the OMD server.
+#
+# Usage:
+#   ansible-playbook -i inventory install-all.yml
+#
+# What it does:
+#   - Installs hooks to /omd/versions/default/lib/omd/hooks/
+#   - Installs skel files to /omd/versions/default/skel/
+#   - Installs shared code to /omd/versions/default/lib/python/
+#   - Each site gets chatbot and thruk-mcp files when created
+#   - Sites run install-deps.sh to install Python packages locally
+
+- name: Install Chatbot and Thruk MCP into OMD
+  hosts: omd_servers
+  become: yes
+  vars:
+    omd_version: "default"
+    omd_root: "/omd/versions/{{ omd_version }}"
+    chatbot_repo: "{{ playbook_dir }}/.."
+    thruk_mcp_repo: "{{ playbook_dir }}/.."
+
+  tasks:
+    - name: Verify OMD installation
+      stat:
+        path: "{{ omd_root }}"
+      register: omd_install
+      failed_when: not omd_install.stat.exists
+      tags: [always]
+
+    - name: Display OMD version path
+      debug:
+        msg: "Installing chatbot and thruk-mcp to OMD version at {{ omd_root }}"
+      tags: [always]
+
+    - name: Install Chatbot
+      import_tasks: roles/chatbot/tasks/main.yml
+      tags: [chatbot]
+
+    - name: Install Thruk MCP
+      import_tasks: roles/thruk_mcp/tasks/main.yml
+      tags: [thruk_mcp]
+
+    - name: Display installation summary
+      debug:
+        msg: |
+          ========================================
+          Installation Complete!
+          ========================================
+
+          Both Chatbot and Thruk MCP have been installed to {{ omd_root }}
+
+          Next steps for each OMD site:
+
+          1. Enable the chatbot service:
+             omd config set CHATBOT on
+
+          2. Install Python dependencies:
+             cd $OMD_ROOT/etc/chatbot
+             ./install-deps.sh
+
+          3. Configure the chatbot:
+             Edit $OMD_ROOT/etc/chatbot/chatbot.conf
+             Set OPENAI_API_KEY and other LLM settings
+
+          4. Start the chatbot:
+             omd start chatbot
+
+          5. Access the chatbot at:
+             http://your-server/$OMD_SITE/chatbot
+
+          Notes:
+          - Thruk MCP is a stdio subprocess (no separate daemon)
+          - The chatbot spawns thruk_mcp.py automatically as needed
+          - Thruk MCP auto-configures from OMD environment
+          - Dependencies are shared between chatbot and thruk-mcp
+
+      tags: [always]

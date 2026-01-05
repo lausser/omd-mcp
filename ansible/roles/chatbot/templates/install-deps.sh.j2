@@ -1,0 +1,89 @@
+#!/bin/bash
+# Install Python dependencies for chatbot
+# This script should be run as the OMD site user
+
+set -e
+
+if [ -z "$OMD_ROOT" ]; then
+    echo "ERROR: This script must be run as an OMD site user"
+    echo "Usage: su - <sitename> && cd $OMD_ROOT/etc/chatbot && ./install-deps.sh"
+    exit 1
+fi
+
+echo "Installing Python dependencies for chatbot"
+echo "Site: $OMD_SITE"
+echo "OMD_ROOT: $OMD_ROOT"
+echo
+
+# Check Python version
+PYTHON_VERSION=$(python3 --version | awk '{print $2}')
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+echo "Python version: $PYTHON_VERSION"
+
+# Warn about Python 3.9 limitations
+if [ "$PYTHON_MINOR" -lt 11 ]; then
+    echo
+    echo "WARNING: Python $PYTHON_VERSION detected"
+    echo "FastMCP requires Python 3.11+. It will be skipped on this system."
+    echo "The chatbot will work but MCP integration will not be available."
+    echo
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+# Path to requirements.txt
+REQUIREMENTS="$OMD_ROOT/etc/chatbot/requirements.txt"
+
+if [ ! -f "$REQUIREMENTS" ]; then
+    echo "ERROR: requirements.txt not found at $REQUIREMENTS"
+    exit 1
+fi
+
+echo
+echo "Installing packages from $REQUIREMENTS"
+echo "Target directory: $OMD_ROOT/local/lib/python"
+echo
+
+# Upgrade pip first
+python3 -m pip install --upgrade pip
+
+# Install core requirements
+# OMD's pip automatically installs to $OMD_ROOT/local/lib/python
+python3 -m pip install -r "$REQUIREMENTS"
+
+echo
+echo "✓ Core dependencies installed successfully"
+echo
+
+# Install optional dependencies (LLM + MCP)
+REQUIREMENTS_OPT="$OMD_ROOT/etc/chatbot/requirements-optional.txt"
+
+if [ -f "$REQUIREMENTS_OPT" ]; then
+    echo "Installing optional dependencies (LLM + MCP integration)..."
+    echo "This may take a few minutes (100+ packages)..."
+    echo
+
+    # Install optional dependencies
+    python3 -m pip install -r "$REQUIREMENTS_OPT"
+
+    echo
+    echo "✓ Optional dependencies installed successfully"
+else
+    echo "Warning: requirements-optional.txt not found, skipping optional dependencies"
+    echo "LLM and MCP features will not be available"
+fi
+
+echo
+echo "Installed packages:"
+python3 -m pip list | grep -E "(fastapi|uvicorn|jinja2|python-dotenv|openai|fastmcp)"
+echo
+echo "Next steps:"
+echo "1. Configure chatbot: vi $OMD_ROOT/etc/chatbot/chatbot.conf"
+echo "2. Set OPENAI_API_KEY for LLM features"
+echo "3. Start chatbot: $OMD_ROOT/etc/init.d/chatbot start"
+echo "4. Check status: curl http://127.0.0.1:\$CONFIG_CHATBOT_TCP_PORT/health"
+echo

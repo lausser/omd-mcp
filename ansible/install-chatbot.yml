@@ -1,0 +1,39 @@
+---
+# Ansible Playbook: Install Chatbot into OMD Version
+#
+# This playbook installs ONLY the chatbot as a system-wide OMD component.
+# Run as root on the OMD server.
+#
+# NOTE: To install both Chatbot AND Thruk MCP, use install-all.yml instead.
+#
+# Usage:
+#   ansible-playbook -i inventory install-chatbot.yml
+#
+# What it does:
+#   - Installs hooks to /omd/versions/default/lib/omd/hooks/
+#   - Installs skel files to /omd/versions/default/skel/
+#   - Each site gets chatbot files when created
+#   - Sites run install-deps.sh to install Python packages locally
+
+- name: Install Chatbot into OMD
+  hosts: omd_servers
+  become: yes
+  vars:
+    omd_version: "default"
+    omd_root: "/omd/versions/{{ omd_version }}"
+    chatbot_repo: "{{ playbook_dir }}/.."
+
+  tasks:
+    - name: Verify OMD installation
+      stat:
+        path: "{{ omd_root }}"
+      register: omd_install
+      failed_when: not omd_install.stat.exists
+      tags: [always]
+
+    - name: Display OMD version path
+      debug:
+        msg: "Installing chatbot to OMD version at {{ omd_root }}"
+      tags: [always]
+
+    - import_tasks: roles/chatbot/tasks/main.yml

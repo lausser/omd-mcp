@@ -1,0 +1,12 @@
+# Optional dependencies for LLM and MCP integration
+# Install these only when you need the features
+
+# LLM Integration - choose one or both
+openai>=1.10.0        # For OpenAI-compatible APIs (ChatGPT, local models)
+anthropic>=0.18.0     # For Claude API
+
+# MCP (Model Context Protocol) Integration
+# WARNING: This has MANY dependencies (100+ packages)
+# Only install if you need Thruk MCP integration
+# FastMCP provides both server (for thruk_mcp) and client (for chatbot) SDKs
+fastmcp>=0.2.0

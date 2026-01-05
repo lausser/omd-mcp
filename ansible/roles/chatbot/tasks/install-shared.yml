@@ -1,0 +1,39 @@
+---
+# Install shared chatbot code and templates
+# These are installed directly to /omd/versions/default/{lib,share}
+# and accessed via symlinks from each site
+
+- name: Create shared directory structure
+  file:
+    path: "{{ omd_root }}/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - lib/python/chatbot
+    - share/chatbot
+    - share/chatbot/templates
+  tags: [shared, code]
+
+- name: Copy Python code files to lib/python/chatbot
+  copy:
+    src: "{{ chatbot_repo }}/chatbot/{{ item }}"
+    dest: "{{ omd_root }}/lib/python/chatbot/{{ item }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop:
+    - __init__.py
+    - chatbot.py
+    - session_manager.py
+  tags: [shared, code]
+
+- name: Copy templates to share/chatbot
+  copy:
+    src: "{{ chatbot_repo }}/chatbot/templates/"
+    dest: "{{ omd_root }}/share/chatbot/templates/"
+    mode: '0644'
+    owner: root
+    group: root
+  tags: [shared, templates]

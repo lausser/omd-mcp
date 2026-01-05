@@ -1,0 +1,89 @@
+---
+# Verify chatbot installation
+
+- name: Check hooks are installed
+  stat:
+    path: "{{ omd_root }}/lib/omd/hooks/{{ item }}"
+  register: hooks_check
+  failed_when: not hooks_check.stat.exists or not hooks_check.stat.executable
+  loop:
+    - CHATBOT
+    - CHATBOT_TCP_PORT
+  tags: [verify]
+
+- name: Check skel directories exist
+  stat:
+    path: "{{ omd_root }}/skel/{{ item }}"
+  register: skel_check
+  failed_when: not skel_check.stat.exists or not skel_check.stat.isdir
+  loop:
+    - etc/chatbot
+    - etc/init.d
+  tags: [verify]
+
+- name: Check shared directories exist
+  stat:
+    path: "{{ omd_root }}/{{ item }}"
+  register: shared_check
+  failed_when: not shared_check.stat.exists or not shared_check.stat.isdir
+  loop:
+    - lib/python/chatbot
+    - share/chatbot/templates
+  tags: [verify]
+
+- name: Check chatbot code is present in shared lib
+  stat:
+    path: "{{ omd_root }}/lib/python/chatbot/chatbot.py"
+  register: code_check
+  failed_when: not code_check.stat.exists
+  tags: [verify]
+
+- name: Check chatbot templates are present in shared location
+  stat:
+    path: "{{ omd_root }}/share/chatbot/templates/index.html"
+  register: templates_check
+  failed_when: not templates_check.stat.exists
+  tags: [verify]
+
+- name: Check init script exists
+  stat:
+    path: "{{ omd_root }}/skel/etc/init.d/chatbot"
+  register: init_check
+  failed_when: not init_check.stat.exists or not init_check.stat.executable
+  tags: [verify]
+
+- name: Check install-deps.sh exists
+  stat:
+    path: "{{ omd_root }}/skel/etc/chatbot/install-deps.sh"
+  register: deps_script_check
+  failed_when: not deps_script_check.stat.exists or not deps_script_check.stat.executable
+  tags: [verify]
+
+- name: Display installation summary
+  debug:
+    msg:
+      - "Chatbot installation verified successfully!"
+      - ""
+      - "Hooks installed:"
+      - "  - {{ omd_root }}/lib/omd/hooks/CHATBOT"
+      - "  - {{ omd_root }}/lib/omd/hooks/CHATBOT_TCP_PORT"
+      - ""
+      - "Shared code and templates:"
+      - "  - {{ omd_root }}/lib/python/chatbot/"
+      - "  - {{ omd_root }}/share/chatbot/templates/"
+      - ""
+      - "Skel files (copied to new sites):"
+      - "  - {{ omd_root }}/skel/etc/chatbot/"
+      - "  - {{ omd_root }}/skel/etc/init.d/chatbot (mode 0755)"
+      - "  - {{ omd_root }}/skel/etc/rc.d/91-chatbot -> ../init.d/chatbot"
+      - ""
+      - "Next steps:"
+      - "1. Create a new OMD site (or update existing):"
+      - "   omd create mysite"
+      - "2. Enable chatbot:"
+      - "   omd config set CHATBOT on"
+      - "3. Install Python dependencies:"
+      - "   cd etc/chatbot && ./install-deps.sh"
+      - "4. Start chatbot:"
+      - "   omd start chatbot"
+  tags: [verify]

@@ -93,22 +93,23 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T031 [P] [US2] Create test_timeout.py in tests/chatbot/ with test_session_expires_after_15_minutes using freezegun
-- [ ] T032 [P] [US2] Add test_activity_resets_timeout to verify last_activity updates in tests/chatbot/test_timeout.py
-- [ ] T033 [P] [US2] Add test_multiple_sessions_timeout_independently in tests/chatbot/test_timeout.py
+- [x] T031 [P] [US2] Create test_timeout.py in tests/chatbot/ with test_session_expires_after_15_minutes (manual timestamp approach instead of freezegun)
+- [x] T032 [P] [US2] Add test_activity_resets_timeout to verify last_activity updates in tests/chatbot/test_timeout.py
+- [x] T033 [P] [US2] Add test_multiple_sessions_timeout_independently in tests/chatbot/test_timeout.py
+- [x] T033a [P] [US2] Add test_cleanup_removes_expired_sessions to verify cleanup functionality
 
 ### Implementation for User Story 2
 
-- [ ] T034 [US2] Implement session expiration check in chatbot/chatbot.py session middleware calling session.is_expired()
-- [ ] T035 [US2] Add session timeout error response (401 with "session_expired" error and message) in chatbot/chatbot.py (FR-009)
-- [ ] T036 [US2] Implement activity tracking on all user interactions in chatbot/chatbot.py calling session.update_activity() (FR-006, FR-013)
-- [ ] T037 [US2] Add JavaScript to chatbot/templates/index.html to disable submit buttons on session timeout (FR-008)
-- [ ] T038 [US2] Add timeout message display in chatbot/templates/index.html showing "session has ended after inactivity" (FR-009)
-- [ ] T039 [US2] Implement /api/session/status endpoint in chatbot/chatbot.py returning session expiration info
-- [ ] T040 [US2] Add JavaScript heartbeat mechanism in chatbot/templates/index.html calling /api/session/heartbeat periodically
-- [ ] T041 [P] [US2] Add structured logging for session timeout events in chatbot/session_manager.py
+- [x] T034 [US2] Implement session expiration check in chatbot/chatbot.py session middleware calling session.is_expired()
+- [x] T035 [US2] Add session timeout error response (401 with "session_expired" error and message) in chatbot/chatbot.py (FR-009)
+- [x] T036 [US2] Implement activity tracking on all user interactions in chatbot/chatbot.py calling session.update_activity() (FR-006, FR-013)
+- [x] T037 [US2] Add JavaScript to chatbot/templates/index.html to disable submit buttons on session timeout (FR-008)
+- [x] T038 [US2] Add timeout message display in chatbot/templates/index.html showing "session has ended after inactivity" (FR-009)
+- [x] T039 [US2] Implement /api/session/status endpoint in chatbot/chatbot.py returning session expiration info
+- [x] T040 [US2] Add JavaScript heartbeat mechanism in chatbot/templates/index.html calling /api/session/heartbeat periodically
+- [x] T041 [P] [US2] Add structured logging for session timeout events in chatbot/session_manager.py
 
-**Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
+**Checkpoint**: At this point, User Stories 1 AND 2 should both work independently ✅
 
 ---
 
@@ -120,22 +121,55 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T042 [P] [US3] Create test_cleanup.py in tests/chatbot/ with test_mcp_connection_closed_on_timeout
-- [ ] T043 [P] [US3] Add test_llm_connection_closed_on_timeout in tests/chatbot/test_cleanup.py
-- [ ] T044 [P] [US3] Add test_conversation_history_cleared_on_timeout in tests/chatbot/test_cleanup.py
-- [ ] T045 [P] [US3] Add test_multiple_concurrent_cleanups in tests/chatbot/test_cleanup.py
+- [x] T042 [P] [US3] Create test_cleanup.py in tests/chatbot/ with test_mcp_connection_closed_on_timeout
+- [x] T043 [P] [US3] Add test_llm_connection_closed_on_timeout in tests/chatbot/test_cleanup.py
+- [x] T044 [P] [US3] Add test_conversation_history_cleared_on_timeout in tests/chatbot/test_cleanup.py
+- [x] T045 [P] [US3] Add test_multiple_concurrent_cleanups in tests/chatbot/test_cleanup.py
+- [x] T045a [P] [US3] Add test_cleanup_handles_multiple_sessions_gracefully for error handling
+- [x] T045b [P] [US3] Add test_cleanup_with_no_connections for edge case testing
+- [x] T045c [P] [US3] Add test_cleanup_clears_all_resources to test cleanup() method directly
+- [x] T045d [P] [US3] Add test_cleanup_handles_none_connections for None connection handling
 
 ### Implementation for User Story 3
 
-- [ ] T046 [US3] Implement background cleanup task in chatbot/chatbot.py using asyncio.create_task() calling SessionStore.cleanup_expired_sessions() every 60s
-- [ ] T047 [US3] Add MCP connection close logic in UserSession.cleanup() method in chatbot/session_manager.py (FR-010)
-- [ ] T048 [US3] Add LLM connection close logic in UserSession.cleanup() method in chatbot/session_manager.py (FR-011)
-- [ ] T049 [US3] Add conversation_history.clear() in UserSession.cleanup() method in chatbot/session_manager.py (FR-012)
-- [ ] T050 [US3] Remove session from SessionStore.sessions dict after cleanup in chatbot/session_manager.py
-- [ ] T051 [P] [US3] Add structured logging for cleanup events (connections closed, memory freed) in chatbot/session_manager.py
-- [ ] T052 [P] [US3] Add error handling for cleanup failures (log error but don't crash) in chatbot/session_manager.py
+- [x] T046 [US3] Implement background cleanup task in chatbot/chatbot.py using asyncio.create_task() calling SessionStore.cleanup_expired_sessions() every 60s
+- [x] T047 [US3] Add MCP connection close logic in UserSession.cleanup() method in chatbot/session_manager.py (FR-010)
+- [x] T048 [US3] Add LLM connection close logic in UserSession.cleanup() method in chatbot/session_manager.py (FR-011)
+- [x] T049 [US3] Add conversation_history.clear() in UserSession.cleanup() method in chatbot/session_manager.py (FR-012)
+- [x] T050 [US3] Remove session from SessionStore.sessions dict after cleanup in chatbot/session_manager.py
+- [x] T051 [P] [US3] Add structured logging for cleanup events (connections closed, memory freed) in chatbot/session_manager.py
+- [x] T052 [P] [US3] Add error handling for cleanup failures (log error but don't crash) in chatbot/session_manager.py
 
-**Checkpoint**: All user stories should now be independently functional
+**Checkpoint**: All user stories should now be independently functional ✅
+
+**Testing Status**: All User Story 1, 2, and 3 tests complete - 19 tests passing ✅
+
+---
+
+## Phase 5.5: LLM Integration (Added 2025-12-31)
+
+**Goal**: Integrate OpenAI-compatible LLM for chatbot responses
+
+**Status**: ✅ Completed
+
+### Implementation
+
+- [x] T052a Add OpenAI client import with graceful fallback in chatbot/chatbot.py
+- [x] T052b Add LLM configuration from environment (OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL) in chatbot/chatbot.py
+- [x] T052c Initialize AsyncOpenAI client with configuration in chatbot/chatbot.py
+- [x] T052d Implement call_llm() function to send conversation history to LLM in chatbot/chatbot.py
+- [x] T052e Add system message with Thruk context and username in call_llm() function
+- [x] T052f Update /api/chat endpoint to call LLM instead of placeholder response in chatbot/chatbot.py
+- [x] T052g Add LLM status logging on startup in chatbot/chatbot.py
+- [x] T052h Fix API path resolution for OMD deployment in chatbot/templates/index.html (dynamic base path)
+- [x] T052i Add error handling for LLM API failures in chatbot/chatbot.py
+- [x] T052j Add openai>=1.10.0 to requirements-optional.txt
+
+**Notes**:
+- Uses OpenAI-compatible API (works with OpenAI, local models, etc.)
+- Conversation history maintained per session
+- Username passed to LLM in system message
+- Gracefully degrades if OpenAI library not installed or API key not set
 
 ---
 
@@ -143,17 +177,21 @@
 
 **Purpose**: Add username parameter to Thruk MCP tools for authorization
 
-- [ ] T053 [P] Add username parameter (default="chatuser") to thruk_list_hosts tool in thruk_mcp/thruk_mcp.py (FR-015)
-- [ ] T054 [P] Add username parameter to thruk_list_services tool in thruk_mcp/thruk_mcp.py
-- [ ] T055 [P] Add username parameter to thruk_list_hostgroups tool in thruk_mcp/thruk_mcp.py
-- [ ] T056 [P] Add username parameter to thruk_list_servicegroups tool in thruk_mcp/thruk_mcp.py
-- [ ] T057 [P] Add username parameter to thruk_list_downtimes tool in thruk_mcp/thruk_mcp.py
-- [ ] T058 [P] Add username parameter to thruk_schedule_host_downtime tool in thruk_mcp/thruk_mcp.py
-- [ ] T059 [P] Add username parameter to thruk_schedule_service_downtime tool in thruk_mcp/thruk_mcp.py
-- [ ] T060 [P] Add username parameter to thruk_schedule_hostgroup_downtime tool in thruk_mcp/thruk_mcp.py
-- [ ] T061 [P] Add username parameter to thruk_schedule_servicegroup_downtime tool in thruk_mcp/thruk_mcp.py
-- [ ] T062 [P] Update all Thruk API calls in thruk_mcp/thruk_mcp.py to pass username for authorization (FR-016, FR-017)
-- [ ] T063 [P] Add structured logging for username parameter in each tool invocation in thruk_mcp/thruk_mcp.py
+**Status**: ✅ Completed
+
+- [x] T053 [P] Add username parameter (default="chatuser") to thruk_list_hosts tool in thruk_mcp/thruk_mcp.py (FR-015)
+- [x] T054 [P] Add username parameter to thruk_list_services tool in thruk_mcp/thruk_mcp.py
+- [x] T055 [P] Add username parameter to thruk_list_hostgroups tool in thruk_mcp/thruk_mcp.py
+- [x] T056 [P] Add username parameter to thruk_list_servicegroups tool in thruk_mcp/thruk_mcp.py
+- [x] T057 [P] Add username parameter to thruk_list_downtimes tool in thruk_mcp/thruk_mcp.py
+- [x] T058 [P] Add username parameter to thruk_schedule_host_downtime tool in thruk_mcp/thruk_mcp.py
+- [x] T059 [P] Add username parameter to thruk_schedule_service_downtime tool in thruk_mcp/thruk_mcp.py
+- [x] T060 [P] Add username parameter to thruk_schedule_hostgroup_downtime tool in thruk_mcp/thruk_mcp.py
+- [x] T061 [P] Add username parameter to thruk_schedule_servicegroup_downtime tool in thruk_mcp/thruk_mcp.py
+- [x] T062 [P] Update all Thruk API calls in thruk_mcp/thruk_mcp.py to pass username for authorization (FR-016, FR-017)
+- [x] T063 [P] Add structured logging for username parameter in each tool invocation in thruk_mcp/thruk_mcp.py
+
+**Checkpoint**: All Thruk MCP tools now include username parameter for authorization ✅
 
 ---
 
@@ -161,15 +199,17 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T064 [P] Add comprehensive docstrings to all classes and methods in chatbot/session_manager.py
-- [ ] T065 [P] Add type hints to all functions in chatbot/chatbot.py and chatbot/session_manager.py
-- [ ] T066 [P] Update README.md with session management configuration variables
-- [ ] T067 [P] Add session management section to quickstart.md with local testing examples
-- [ ] T068 [P] Run full test suite and verify all tests pass (pytest tests/)
-- [ ] T069 Add session timeout accuracy validation test verifying 15min±5s timeout (SC-003)
-- [ ] T070 Add concurrent session performance test with 50 sessions (SC-002)
-- [ ] T071 [P] Add username display performance test verifying <1s display time (SC-001)
-- [ ] T072 [P] Add resource cleanup performance test verifying cleanup within 30s (SC-004)
+**Status**: ✅ Completed
+
+- [x] T064 [P] Add comprehensive docstrings to all classes and methods in chatbot/session_manager.py
+- [x] T065 [P] Add type hints to all functions in chatbot/chatbot.py and chatbot/session_manager.py
+- [x] T066 [P] Update README.md with session management configuration variables
+- [x] T067 [P] Add session management section to quickstart.md with local testing examples
+- [x] T068 [P] Run full test suite and verify all tests pass (pytest tests/)
+- [x] T069 Add session timeout accuracy validation test verifying 15min±5s timeout (SC-003)
+- [x] T070 Add concurrent session performance test with 50 sessions (SC-002)
+- [x] T071 [P] Add username display performance test verifying <1s display time (SC-001)
+- [x] T072 [P] Add resource cleanup performance test verifying cleanup within 30s (SC-004)
 
 ---
 

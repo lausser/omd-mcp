@@ -1,0 +1,33 @@
+---
+# Thruk MCP installation - simplified (no daemon, just stdio subprocess)
+# The chatbot spawns thruk_mcp.py as needed via stdin/stdout
+
+- name: Create shared directory for thruk_mcp
+  file:
+    path: "{{ omd_root }}/lib/python/thruk_mcp"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  tags: [thruk_mcp]
+
+- name: Copy thruk_mcp Python code files
+  copy:
+    src: "{{ thruk_mcp_repo }}/thruk_mcp/{{ item }}"
+    dest: "{{ omd_root }}/lib/python/thruk_mcp/{{ item }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop:
+    - __init__.py
+    - thruk_mcp.py
+  tags: [thruk_mcp]
+
+- name: Display installation info
+  debug:
+    msg: |
+      Thruk MCP installed to {{ omd_root }}/lib/python/thruk_mcp/
+
+      This is a stdio-based MCP server spawned by the chatbot as a subprocess.
+      No separate daemon or OMD hooks are needed.
+  tags: [thruk_mcp]

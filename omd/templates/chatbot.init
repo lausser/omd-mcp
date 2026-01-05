@@ -1,0 +1,79 @@
+#!/bin/bash
+
+### OMD INIT INFO
+# PIDFILE:  tmp/run/chatbot.pid
+# DEPENDS:  CONFIG_CHATBOT = on
+# BINARY:   local/lib/python/bin/uvicorn
+# ARGMATCH: chatbot.chatbot:app
+### END INIT INFO
+
+cd || exit 1
+. etc/omd/site.conf
+if [ "$CONFIG_CHATBOT" != "on" ] ; then
+    exit 5
+fi
+. lib/omd/init_profile
+. .profile
+
+NAME="chatbot"
+DAEMON=$OMD_ROOT/local/lib/python/bin/uvicorn
+LOG_DIR=$OMD_ROOT/var/log
+LOG_FILE=$OMD_ROOT/var/log/chatbot.log
+PID_FILE=$OMD_ROOT/tmp/run/chatbot.pid
+NOHUP=1
+STORE_PID=1
+START_TIMEOUT=30
+
+# Set Python path to include chatbot code
+# IMPORTANT: local/lib/python MUST come before lib/python to allow overriding OMD's old packages
+# - $OMD_ROOT/local/lib/python contains site-specific packages (newer versions, installed by pip)
+# - $OMD_ROOT/lib/python contains shared chatbot code and OMD system packages
+export PYTHONPATH=$OMD_ROOT/local/lib/python:$OMD_ROOT/lib/python:$PYTHONPATH
+
+# Chatbot configuration from site.conf (OMD integration only)
+CHATBOT_PORT=${CONFIG_CHATBOT_TCP_PORT:-8000}
+CHATBOT_HOST="127.0.0.1"
+
+# Source application configuration
+CHATBOT_CONF=$OMD_ROOT/etc/chatbot/chatbot.conf
+if [ -f "$CHATBOT_CONF" ]; then
+    . "$CHATBOT_CONF"
+else
+    # Defaults if config file doesn't exist
+    SESSION_TIMEOUT_MINUTES=15
+    DEFAULT_USERNAME="chatuser"
+    SESSION_CLEANUP_INTERVAL_SECONDS=60
+    LOG_LEVEL="INFO"
+    OPENAI_API_KEY=""
+    OPENAI_BASE_URL="https://api.openai.com/v1"
+    OPENAI_MODEL="gpt-4"
+    THRUK_API_KEY=""
+    THRUK_VERIFY_SSL="false"
+fi
+
+# Export environment variables for chatbot application
+export SESSION_TIMEOUT_MINUTES
+export DEFAULT_USERNAME
+export SESSION_CLEANUP_INTERVAL_SECONDS
+export LOG_LEVEL
+export PORT=$CHATBOT_PORT
+export HOST=$CHATBOT_HOST
+export OPENAI_API_KEY
+export OPENAI_BASE_URL
+export OPENAI_MODEL
+
+# Thruk MCP configuration (subprocess inherits these via env)
+export THRUK_API_KEY
+export THRUK_VERIFY_SSL
+export THRUK_BASE_URL
+
+# Note: Thruk MCP integration now uses stdio subprocess (no TCP port needed)
+# The thruk_mcp.py subprocess auto-configures itself from OMD environment
+
+mkdir -p "$LOG_DIR"
+
+# Build uvicorn command options
+OPTS="chatbot.chatbot:app --host $CHATBOT_HOST --port $CHATBOT_PORT --log-level info"
+
+# Call the generic init function
+__generic_init "$@"

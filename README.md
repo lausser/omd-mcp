@@ -8,13 +8,60 @@ A chatbot application that integrates with Thruk monitoring system via Model Con
 - **Thruk MCP Service**: MCP server providing Thruk monitoring tools
 - **Communication**: HTTP/Streamable HTTP between services
 
-## 📋 Prerequisites
+## ✨ Features
+
+### Session Management
+- **User Authentication**: X-WEBAUTH-USER header integration (Apache proxy) or standalone mode
+- **Session Isolation**: Each user gets their own isolated session with conversation history
+- **Automatic Timeout**: Configurable inactivity timeout (default: 15 minutes)
+- **Timeout Detection**: Frontend detects expired sessions and displays clear notification
+- **Resource Cleanup**: Automatic cleanup of expired sessions (MCP connections, LLM connections, conversation history)
+- **Session Heartbeat**: Keep-alive mechanism prevents timeout during active use
+- **Secure Cookies**: HTTP-only, SameSite=Lax session cookies
+
+### LLM Integration
+- **OpenAI-Compatible API**: Works with OpenAI, Anthropic Claude via proxy, or local models
+- **Conversation History**: Full conversation context maintained per session
+- **User Context**: Username passed to LLM for personalized responses
+- **MCP Tool Access**: LLM can call Thruk MCP tools for real-time monitoring data
+- **Function Calling**: Automatic tool execution with results passed back to LLM
+- **Graceful Degradation**: Falls back to placeholder if LLM not configured
+- **Configurable**: API endpoint, model, and credentials via environment variables
+
+### UI Features
+- **Modern Chat Interface**: Clean, responsive design with message history
+- **Real-time Feedback**: Typing indicators, error messages, session status
+- **Session Info Display**: Shows username and truncated session ID
+- **Timeout Notifications**: Yellow banner and inline message when session expires
+- **Auto-refresh Prompt**: Clear instructions when session timeout detected
+
+## 📦 Deployment Options
+
+This project supports three deployment modes:
+
+1. **🐳 Containerized (Development)** - Run chatbot and MCP services in containers
+   - Best for: Development, testing, standalone deployment
+   - See: Quick Start section below
+
+2. **🏢 OMD Integration - Site Level** - Deploy to individual OMD sites
+   - Best for: Testing, single-site deployments
+   - Quick start: [omd/QUICKSTART.md](omd/QUICKSTART.md)
+   - Full guide: [omd/README.md](omd/README.md)
+
+3. **🚀 OMD Integration - System Level (Recommended for Production)** - Install via Ansible
+   - Best for: Production, multi-site OMD deployments
+   - Install once, available to all sites
+   - Managed via `omd config` commands
+   - Quick start: [ansible/QUICKSTART.md](ansible/QUICKSTART.md)
+   - Full guide: [ansible/README.md](ansible/README.md)
+
+## 📋 Prerequisites (Containerized Deployment)
 
 - Python 3.11+
 - Podman (recommended) or Docker with docker-compose
 - `.env` file with API credentials (copy from `.env.example`)
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Containerized)
 
 ### 1. Configure Environment
 
@@ -27,11 +74,40 @@ nano .env
 ```
 
 Required configuration:
-- `THRUK_API_KEY`: Your Thruk API key
+- `THRUK_API_KEY`: Your Thruk API key (or secret.key from OMD - see OMD Integration below)
 - `THRUK_BASE_URL`: Your Thruk server URL (e.g., https://your-server.com/thruk)
+- `MCP_SERVER_URL`: Thruk MCP server SSE endpoint (e.g., http://thruk-mcp:8001/sse)
 - `OPENAI_API_KEY`: Your LLM API key
 - `OPENAI_BASE_URL`: API endpoint (default: https://api.openai.com/v1)
 - `OPENAI_MODEL`: Model to use (e.g., gpt-4, claude-3, etc.)
+
+**Note for OMD Integration**: When running in an OMD site, the chatbot automatically loads `$OMD_ROOT/var/thruk/secret.key` if `THRUK_API_KEY` is not explicitly set. This enables multi-user authentication where the chatbot authenticates to Thruk as each session user via the `X-Thruk-Auth-User` header.
+
+### Session Management Configuration
+
+The chatbot includes robust session management with configurable timeouts and automatic cleanup:
+
+- `SESSION_TIMEOUT_MINUTES` (default: `15`)
+  - Session inactivity timeout in minutes
+  - Sessions expire after this period of no user interaction
+  - Frontend automatically detects expiration and prompts refresh
+  - Example: `SESSION_TIMEOUT_MINUTES=30` for 30-minute timeout
+
+- `SESSION_CLEANUP_INTERVAL_SECONDS` (default: `60`)
+  - Background cleanup task interval in seconds
+  - How often expired sessions are removed from memory
+  - Lower values = faster cleanup, higher CPU usage
+  - Example: `SESSION_CLEANUP_INTERVAL_SECONDS=120` for 2-minute cleanup interval
+
+- `DEFAULT_USERNAME` (default: `chatuser`)
+  - Default username when X-WEBAUTH-USER header is absent
+  - Used in standalone/development deployments without Apache proxy
+  - Example: `DEFAULT_USERNAME=anonymous`
+
+### Other Optional Configuration
+
+- `LOG_LEVEL`: Logging level - DEBUG, INFO, WARNING, ERROR (default: INFO)
+- `THRUK_VERIFY_SSL`: SSL certificate verification (default: true, false in OMD for self-signed certs)
 
 ### 2. Run with Podman Compose
 
@@ -74,6 +150,106 @@ podman compose down
 
 # Stop and remove volumes (if any)
 podman compose down -v
+```
+
+## 🔐 Session Management
+
+The chatbot includes a comprehensive session management system that ensures security and proper resource cleanup:
+
+### How Sessions Work
+
+1. **Session Creation**: When you access the chatbot UI (`http://localhost:8000`), a new session is automatically created
+2. **User Authentication**:
+   - In OMD deployments: Username extracted from Apache's `X-WEBAUTH-USER` header
+   - In standalone/development: Uses `DEFAULT_USERNAME` environment variable (default: `chatuser`)
+3. **Session Isolation**: Each user gets their own isolated session with:
+   - Separate conversation history
+   - Independent MCP connections
+   - Isolated LLM context
+4. **Automatic Timeout**: Sessions expire after `SESSION_TIMEOUT_MINUTES` of inactivity (default: 15 minutes)
+5. **Resource Cleanup**: Expired sessions automatically release MCP connections, LLM connections, and conversation history
+
+### Session Timeout Behavior
+
+**What happens when a session times out:**
+- Frontend displays a yellow notification banner: "Your session has ended after X minutes of inactivity"
+- User can refresh the page to create a new session
+- Previous conversation history is lost (sessions are not persisted)
+- All resources (MCP/LLM connections) are cleaned up automatically
+
+**How to prevent timeout:**
+- The frontend automatically sends heartbeat requests every 50% of the timeout interval
+- Any user interaction (typing, sending messages) resets the inactivity timer
+- Page Visibility API prevents timeout when browser tab is in background:
+  - When you switch back to the chatbot tab, an immediate heartbeat is sent
+  - This prevents timeouts during brief tab switches
+
+### Testing Session Management Locally
+
+```bash
+# 1. Set a short timeout for testing (e.g., 2 minutes)
+echo "SESSION_TIMEOUT_MINUTES=2" >> .env
+
+# 2. Start the chatbot
+podman compose up -d chatbot
+
+# 3. Open browser to http://localhost:8000
+# 4. Send a message
+# 5. Wait 2+ minutes without interaction
+# 6. Try to send another message
+# Expected: Session timeout notification appears
+
+# 7. Check logs to see cleanup
+podman compose logs -f chatbot | grep -i "session"
+```
+
+### Authentication in Development vs Production
+
+**Development (Standalone)**:
+```bash
+# No Apache proxy - uses DEFAULT_USERNAME
+DEFAULT_USERNAME=testuser
+# All sessions will be created as "testuser"
+```
+
+**Production (OMD Integration)**:
+```bash
+# Apache proxy sends X-WEBAUTH-USER header
+# Chatbot extracts actual username from header
+# Each user gets their own isolated session
+# Example: user "alice" and "bob" have separate sessions
+```
+
+**Testing Authentication Locally**:
+```bash
+# Simulate Apache header with curl
+curl -H "X-WEBAUTH-USER: alice" http://localhost:8000/
+
+# Or use browser extension to set custom headers
+# Chrome: ModHeader, Firefox: Modify Header Value
+```
+
+### Session Security Features
+
+- **HTTP-Only Cookies**: Session ID stored in HTTP-only cookie (prevents XSS attacks)
+- **SameSite Protection**: Cookies set to `SameSite=Lax` (prevents CSRF attacks)
+- **Automatic Expiration**: Cookie expires after `SESSION_TIMEOUT_MINUTES`
+- **Resource Limits**: Background cleanup prevents memory leaks from abandoned sessions
+- **Per-User Isolation**: Each user's session data is completely isolated
+- **No Persistence**: Sessions are not stored to disk (memory-only for security)
+
+### Monitoring Sessions
+
+```bash
+# Check active session count
+curl http://localhost:8000/health
+# Returns: {"status": "healthy", "active_sessions": 3, "timestamp": "..."}
+
+# View session-related logs
+podman compose logs chatbot | grep -i session
+
+# Watch for session creation/cleanup in real-time
+podman compose logs -f chatbot | grep -E "(Session created|Session.*expired|Cleaned up)"
 ```
 
 ## 📁 Project Structure
@@ -204,7 +380,14 @@ The Thruk MCP service currently provides these tools (placeholder implementation
   - Chatbot: UID 1000, user `chatbot`
   - Thruk MCP: UID 1001, user `thruk-mcp`
 - **Multi-stage builds** - Minimal attack surface in production images
-- **Session management** - 15-minute inactivity timeout, HTTP-only cookies
+- **Session Management Security**:
+  - Configurable inactivity timeout (default: 15 minutes)
+  - HTTP-only cookies prevent XSS attacks
+  - SameSite=Lax cookies prevent CSRF attacks
+  - Automatic session cleanup on timeout
+  - Frontend timeout detection with clear user notification
+  - Session heartbeat keeps active sessions alive
+  - Per-user session isolation
 - **SSL verification** - Can be disabled for development (`THRUK_VERIFY_SSL=false`)
 - **X-WEBAUTH-USER header** - Username propagation from Apache proxy (see SESSION.md)
 

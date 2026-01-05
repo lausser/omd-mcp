@@ -1,0 +1,36 @@
+---
+# Install OMD hooks for chatbot configuration management
+
+- name: Create hooks directory
+  file:
+    path: "{{ omd_root }}/lib/omd/hooks"
+    state: directory
+    mode: '0755'
+  tags: [hooks]
+
+- name: Copy CHATBOT hook
+  copy:
+    src: "{{ chatbot_repo }}/omd/hooks/CHATBOT"
+    dest: "{{ omd_root }}/lib/omd/hooks/CHATBOT"
+    mode: '0755'
+    owner: root
+    group: root
+  tags: [hooks]
+
+- name: Copy CHATBOT_TCP_PORT hook
+  copy:
+    src: "{{ chatbot_repo }}/omd/hooks/CHATBOT_TCP_PORT"
+    dest: "{{ omd_root }}/lib/omd/hooks/CHATBOT_TCP_PORT"
+    mode: '0755'
+    owner: root
+    group: root
+  tags: [hooks]
+
+- name: Verify hooks are executable
+  file:
+    path: "{{ omd_root }}/lib/omd/hooks/{{ item }}"
+    mode: '0755'
+  loop:
+    - CHATBOT
+    - CHATBOT_TCP_PORT
+  tags: [hooks]

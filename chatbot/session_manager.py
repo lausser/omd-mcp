@@ -67,7 +67,7 @@ class UserSession:
     llm_connection: Optional[Any] = None
     conversation_history: List[Message] = field(default_factory=list)
     is_active: bool = True
-    timeout_minutes: int = 15
+    timeout_minutes: int = 5
 
     def __post_init__(self):
         """Validate session attributes."""

@@ -1,0 +1,93 @@
+#!/bin/bash
+
+# Alias: TCP port number for Chatbot
+# Menu: Addons
+# Description:
+#  Configure the TCP port used for the Chatbot
+#  service of this site.
+
+case "$1" in
+    default)
+        echo "8000"
+    ;;
+    choices)
+        echo "[1-9][0-9]{0,4}"
+    ;;
+    set)
+        # Scan for a free port number by looking at the
+        # configuration of the other sites...
+        PORT=$($OMD_ROOT/lib/omd/port_is_used CHATBOT_TCP_PORT $2)
+        if [ "$PORT" != "$2" ] ; then
+            [ "$CONFIG_CHATBOT" = on ] && echo "Chatbot port $2 is in use. I've chosen $PORT instead." >&2
+            echo "$PORT"
+        fi
+
+        # Create chatbot config directory if it doesn't exist
+        mkdir -p $OMD_ROOT/etc/chatbot
+
+        # Generate Apache configuration
+        cat <<'EOF' > $OMD_ROOT/etc/chatbot/apache.conf
+# This file is managed by 'omd config set CHATBOT_TCP_PORT'.
+# Better do not edit manually
+
+# Load proxy modules (paths differ by distribution)
+# Debian/Ubuntu: /usr/lib/apache2/modules/
+# RHEL/Rocky: /usr/lib64/httpd/modules/
+<IfModule !mod_proxy.c>
+    <IfFile "/usr/lib/apache2/modules/mod_proxy.so">
+        LoadModule proxy_module /usr/lib/apache2/modules/mod_proxy.so
+    </IfFile>
+    <IfFile "/usr/lib64/httpd/modules/mod_proxy.so">
+        LoadModule proxy_module /usr/lib64/httpd/modules/mod_proxy.so
+    </IfFile>
+</IfModule>
+<IfModule !mod_proxy_http.c>
+    <IfFile "/usr/lib/apache2/modules/mod_proxy_http.so">
+        LoadModule proxy_http_module /usr/lib/apache2/modules/mod_proxy_http.so
+    </IfFile>
+    <IfFile "/usr/lib64/httpd/modules/mod_proxy_http.so">
+        LoadModule proxy_http_module /usr/lib64/httpd/modules/mod_proxy_http.so
+    </IfFile>
+</IfModule>
+
+RewriteEngine On
+
+EOF
+
+        # Append port-specific configuration
+        cat <<EOF >> $OMD_ROOT/etc/chatbot/apache.conf
+<Location /\${OMD_SITE}/chatbot>
+    ProxyPass http://127.0.0.1:$PORT retry=0 disablereuse=On
+    ProxyPassReverse http://127.0.0.1:$PORT
+    ProxyPreserveHost On
+    RewriteRule .* - [E=PROXY_USER:%{LA-U:REMOTE_USER},NS]
+    SetEnvIf Request_Protocol ^HTTPS.* IS_HTTPS=1
+    SetEnvIf Authorization "^.+\$" IS_BASIC_AUTH=1
+    # without thruk cookie auth, use the proxy user from the rewrite rule above
+    RequestHeader set X-WEBAUTH-USER "%{PROXY_USER}s"  env=IS_HTTPS
+    RequestHeader set X-WEBAUTH-USER "%{PROXY_USER}e"  env=!IS_HTTPS
+    # when thruk cookie auth is used, fallback to remote user directly
+    RequestHeader set X-WEBAUTH-USER "%{REMOTE_USER}e" env=!IS_BASIC_AUTH
+    SetEnvIf Authorization "^Bearer\\s(.+)\$" HasBearer=1
+    RequestHeader unset Authorization env=!HasBearer
+
+    ErrorDocument 503 /503.html?CHATBOT=on
+</Location>
+
+# Allow API endpoints for session management
+<Location /\${OMD_SITE}/chatbot/api/>
+    # API endpoints inherit authentication from parent location
+</Location>
+
+# Health check endpoint (can be accessed without auth for monitoring)
+<Location /\${OMD_SITE}/chatbot/health>
+    Order Deny,Allow
+    Allow from all
+    Satisfy any
+</Location>
+EOF
+    ;;
+    depends)
+        [ "$CONFIG_CHATBOT" = on ]
+    ;;
+esac

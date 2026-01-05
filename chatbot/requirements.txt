@@ -1,17 +1,16 @@
-# Web Framework
+# Core Web Framework (minimal dependencies)
 fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
+uvicorn>=0.27.0  # Without [standard] to reduce dependencies
 python-multipart>=0.0.6
 
-# MCP SDK
-fastmcp>=0.2.0
-
-# Templating
-jinja2>=3.1.3
-
-# LLM Integration
-openai>=1.10.0
-anthropic>=0.18.0
+# NOTE: These are already provided by OMD:
+# - jinja2 (templating)
+# - PyYAML (config parsing)
 
 # Utilities
 python-dotenv>=1.0.0
+
+# Optional dependencies (install separately when needed):
+# - For LLM integration: openai>=1.10.0 or anthropic>=0.18.0
+# - For MCP integration: fastmcp>=0.2.0
+# See requirements-optional.txt for full list

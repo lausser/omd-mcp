@@ -1,0 +1,18 @@
+---
+# Chatbot installation tasks
+
+- name: Install OMD hooks
+  include_tasks: install-hooks.yml
+  tags: [hooks]
+
+- name: Install shared code and templates
+  include_tasks: install-shared.yml
+  tags: [shared, code]
+
+- name: Install skel files
+  include_tasks: install-skel.yml
+  tags: [skel]
+
+- name: Verify installation
+  include_tasks: verify.yml
+  tags: [verify, never]

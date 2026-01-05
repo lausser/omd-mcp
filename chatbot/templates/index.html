@@ -335,11 +335,18 @@
     </div>
 
     <script>
+        // API base path - construct from current page URL
+        // E.g., if page is /demo/chatbot, API base is /demo/chatbot/api/
+        const currentPath = window.location.pathname;
+        const API_BASE = currentPath + (currentPath.endsWith('/') ? '' : '/') + 'api/';
+        console.log('API_BASE:', API_BASE);
+
         const chatContainer = document.getElementById('chatContainer');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
         const timeoutMessage = document.getElementById('timeoutMessage');
         let sessionActive = true;
+        let heartbeatIntervalId = null;
 
         // Auto-resize textarea
         messageInput.addEventListener('input', function() {
@@ -374,6 +381,13 @@
             const messageContent = document.createElement('div');
             messageContent.className = 'message-content';
             messageContent.textContent = content;
+
+            // Preserve formatting for error messages with newlines/tracebacks
+            if (content.includes('\n')) {
+                messageContent.style.whiteSpace = 'pre-wrap';
+                messageContent.style.fontFamily = 'monospace';
+                messageContent.style.fontSize = '0.9em';
+            }
 
             messageDiv.appendChild(avatar);
             messageDiv.appendChild(messageContent);
@@ -432,7 +446,7 @@
             showTypingIndicator();
 
             try {
-                const response = await fetch('/api/chat', {
+                const response = await fetch(API_BASE + 'chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -442,13 +456,50 @@
 
                 hideTypingIndicator();
 
+                console.log('Response status:', response.status);
+
+                // Handle session expiration (401 Unauthorized)
                 if (response.status === 401) {
-                    // Session expired
-                    handleSessionTimeout();
+                    console.log('Session expired, handling timeout');
+                    // Session expired - try to get detailed message
+                    try {
+                        const errorData = await response.json();
+                        console.log('Error data:', errorData);
+                        const message = errorData.detail?.message || 'Your session has ended due to inactivity.';
+                        handleSessionTimeout(message);
+                    } catch (e) {
+                        console.error('Error parsing 401 response:', e);
+                        // Fallback if response body can't be parsed
+                        handleSessionTimeout('Your session has ended due to inactivity.');
+                    }
                     return;
                 }
 
                 if (!response.ok) {
+                    // Try to get detailed error information
+                    try {
+                        const errorData = await response.json();
+                        console.error('API Error:', errorData);
+
+                        // If error has detailed information (admin view), display it
+                        if (errorData.detail && typeof errorData.detail === 'object' && errorData.detail.error) {
+                            let errorMessage = `❌ ${errorData.detail.error}\n\n`;
+                            errorMessage += `Type: ${errorData.detail.type}\n`;
+                            errorMessage += `Message: ${errorData.detail.message}\n\n`;
+                            if (errorData.detail.traceback) {
+                                errorMessage += `Traceback:\n${errorData.detail.traceback}`;
+                            }
+                            throw new Error(errorMessage);
+                        } else if (errorData.detail) {
+                            throw new Error(errorData.detail);
+                        }
+                    } catch (parseError) {
+                        // If JSON parsing fails, throw generic error
+                        if (parseError.message && parseError.message.startsWith('❌')) {
+                            // Re-throw our formatted error
+                            throw parseError;
+                        }
+                    }
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
@@ -458,7 +509,16 @@
             } catch (error) {
                 hideTypingIndicator();
                 console.error('Error sending message:', error);
-                addMessage('assistant', 'Sorry, an error occurred. Please try again.');
+                console.error('Error type:', error.name);
+                console.error('Error message:', error.message);
+
+                // Check if this is a session timeout that wasn't caught
+                if (error.message && error.message.includes('401')) {
+                    handleSessionTimeout('Your session has ended due to inactivity.');
+                } else {
+                    // Display error message (will be detailed for admins, generic for others)
+                    addMessage('assistant', error.message || 'Sorry, an error occurred. Please try again.');
+                }
             } finally {
                 // Re-enable input
                 messageInput.disabled = false;
@@ -467,22 +527,34 @@
             }
         }
 
-        function handleSessionTimeout() {
+        function handleSessionTimeout(message) {
             sessionActive = false;
             timeoutMessage.classList.add('show');
             messageInput.disabled = true;
             sendButton.disabled = true;
 
+            // Stop heartbeat interval
+            if (heartbeatIntervalId) {
+                clearInterval(heartbeatIntervalId);
+                heartbeatIntervalId = null;
+            }
+
             // Add system message
             const emptyState = chatContainer.querySelector('.empty-state');
             if (!emptyState) {
-                addMessage('assistant', 'Your session has ended due to inactivity. Please refresh the page to continue.');
+                const timeoutMsg = message || 'Your session has ended due to inactivity.';
+                // Only append "Please refresh..." if not already in message
+                const finalMsg = timeoutMsg.includes('refresh') ? timeoutMsg : timeoutMsg + ' Please refresh the page to continue.';
+                addMessage('assistant', finalMsg);
             }
         }
 
         // Heartbeat mechanism to keep session alive
-        // Sends heartbeat every 5 minutes (300 seconds)
-        const HEARTBEAT_INTERVAL = 300000; // 5 minutes in milliseconds
+        // Calculate heartbeat interval as 50% of session timeout to ensure session stays alive
+        // Session timeout is {{ session_timeout_minutes }} minutes
+        const SESSION_TIMEOUT_MINUTES = {{ session_timeout_minutes }};
+        const HEARTBEAT_INTERVAL = (SESSION_TIMEOUT_MINUTES * 60 * 1000) * 0.5;  // 50% of timeout
+        console.log(`Session timeout: ${SESSION_TIMEOUT_MINUTES} minutes, Heartbeat interval: ${HEARTBEAT_INTERVAL/1000} seconds`);
 
         async function sendHeartbeat() {
             if (!sessionActive) {
@@ -490,7 +562,7 @@
             }
 
             try {
-                const response = await fetch('/api/session/heartbeat', {
+                const response = await fetch(API_BASE + 'session/heartbeat', {
                     method: 'POST'
                 });
 
@@ -503,12 +575,39 @@
         }
 
         // Start heartbeat interval
-        setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+        heartbeatIntervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+
+        // Page Visibility API - handle browser tab throttling
+        let lastVisibilityChange = Date.now();
+        let wasHidden = false;
+
+        document.addEventListener('visibilitychange', async function() {
+            const now = Date.now();
+            const hiddenDuration = now - lastVisibilityChange;
+
+            if (document.hidden) {
+                // Tab became hidden
+                wasHidden = true;
+                console.log('Tab hidden - browser may throttle heartbeat interval');
+            } else {
+                // Tab became visible
+                console.log(`Tab visible again after ${Math.round(hiddenDuration/1000)} seconds`);
+
+                if (wasHidden) {
+                    // Send immediate heartbeat to keep session alive
+                    console.log('Sending immediate heartbeat after tab was hidden');
+                    await sendHeartbeat();
+                    wasHidden = false;
+                }
+            }
+
+            lastVisibilityChange = now;
+        });
 
         // Check session status on page load
         async function checkSessionStatus() {
             try {
-                const response = await fetch('/api/session/status');
+                const response = await fetch(API_BASE + 'session/status');
                 if (response.status === 401) {
                     handleSessionTimeout();
                 }
