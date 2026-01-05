@@ -879,8 +879,32 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
         if hasattr(response, 'candidates') and response.candidates:
             for i, candidate in enumerate(response.candidates):
                 logger.debug(f"Candidate {i}: finish_reason={candidate.finish_reason}")
+
+                # Log all parts in the candidate for debugging
+                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
+                    logger.debug(f"Candidate {i} has {len(candidate.content.parts)} parts")
+                    for j, part in enumerate(candidate.content.parts):
+                        part_type = type(part).__name__
+                        logger.debug(f"  Part {j}: {part_type}")
+
+                        # Log function calls if present
+                        if hasattr(part, 'function_call') and part.function_call:
+                            logger.info(f"    Function call: {part.function_call.name}")
+                            logger.debug(f"    Arguments: {part.function_call.args}")
+                            tool_calls_made.append({
+                                "tool": part.function_call.name,
+                                "arguments": dict(part.function_call.args) if part.function_call.args else {},
+                                "result": "(handled by Gemini SDK)"
+                            })
+
+                        # Log function responses if present
+                        if hasattr(part, 'function_response') and part.function_response:
+                            logger.info(f"    Function response: {part.function_response.name}")
+                            logger.debug(f"    Response content: {part.function_response.response}")
+
+                # Old way (deprecated but keep for compatibility)
                 if hasattr(candidate, 'function_calls') and candidate.function_calls:
-                    logger.info(f"Function calls made: {len(candidate.function_calls)}")
+                    logger.info(f"Function calls made (old format): {len(candidate.function_calls)}")
                     for fc in candidate.function_calls:
                         tool_calls_made.append({
                             "tool": fc.name,
@@ -889,6 +913,8 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
                         })
 
         logger.debug(f"Gemini response received: {len(assistant_message)} characters")
+        if tool_calls_made:
+            logger.info(f"Total tool calls detected: {len(tool_calls_made)}")
 
         return assistant_message, tool_calls_made
 
