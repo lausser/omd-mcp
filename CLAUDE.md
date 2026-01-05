@@ -69,6 +69,11 @@ Python 3.11+ (per README.md prerequisites): Follow standard conventions
 
 ## Recent Changes
 
+- 2026-01-05: Fixed OMD init script Gemini environment variable exports
+  - **CRITICAL FIX**: Init script was sourcing chatbot.conf but not exporting Gemini variables
+  - Added LLM_PROVIDER, GEMINI_API_KEY, GEMINI_BASE_URL, GEMINI_MODEL, GEMINI_VERTEXAI to exports
+  - Fixed issue causing chatbot to default to "openai" even when LLM_PROVIDER="gemini" was configured
+  - Chatbot now correctly initializes Gemini client when configured
 - 2026-01-05: Added Google Gemini API as alternative LLM provider
   - Supports both cloud (Google AI Studio) and on-premise Gemini deployments
   - Configurable via LLM_PROVIDER environment variable (openai or gemini)
