@@ -6,6 +6,7 @@ Auto-generated from all feature plans. Last updated: 2025-12-31
 
 - Python 3.11+ (per README.md prerequisites) + FastAPI (web framework), FastMCP (MCP SDK), uvicorn (ASGI server), Jinja2 (templates) (001-session-management)
 - OpenAI Python SDK (openai>=1.10.0) for LLM integration (optional dependency)
+- Google GenAI SDK (google-genai>=0.3.0) for Gemini LLM integration (optional dependency)
 
 ## Project Structure
 
@@ -68,6 +69,14 @@ Python 3.11+ (per README.md prerequisites): Follow standard conventions
 
 ## Recent Changes
 
+- 2026-01-05: Added Google Gemini API as alternative LLM provider
+  - Supports both cloud (Google AI Studio) and on-premise Gemini deployments
+  - Configurable via LLM_PROVIDER environment variable (openai or gemini)
+  - Uses Gemini's automatic_function_calling for tool orchestration
+  - MCP session passed directly to Gemini SDK (not converted to OpenAI format)
+  - Maintains all existing features (session management, error handling, admin debugging)
+  - Default model: gemini-2.5-flash
+  - Backward compatible: defaults to OpenAI if LLM_PROVIDER not set
 - 2026-01-04: Admin Error Visibility
   - Added detailed error messages for user "omdadmin"
   - Admins see full error type, message, and Python traceback in chat UI
@@ -187,10 +196,17 @@ Python 3.11+ (per README.md prerequisites): Follow standard conventions
 ### Environment Variables
 - Not loaded from `.env` file in OMD deployment
 - Set manually before site starts or via OMD configuration (`$OMD_ROOT/etc/chatbot/chatbot.conf`)
-- **LLM Configuration** (required for AI features):
-  - `OPENAI_API_KEY`: OpenAI or compatible API key
+- **LLM Provider Selection**:
+  - `LLM_PROVIDER`: Provider to use - "openai" or "gemini" (default: openai)
+- **OpenAI Configuration** (when LLM_PROVIDER=openai):
+  - `OPENAI_API_KEY`: OpenAI or compatible API key (required)
   - `OPENAI_BASE_URL`: API endpoint (default: https://api.openai.com/v1)
   - `OPENAI_MODEL`: Model name (default: gpt-4)
+- **Gemini Configuration** (when LLM_PROVIDER=gemini):
+  - `GEMINI_API_KEY`: Gemini API key (required)
+  - `GEMINI_BASE_URL`: API endpoint for on-premise (optional, empty = cloud)
+  - `GEMINI_MODEL`: Model name (default: gemini-2.5-flash)
+  - `GEMINI_VERTEXAI`: Enable Vertex AI protocol for enterprise (default: false)
 - **Thruk MCP Configuration** (auto-configured in OMD):
   - `THRUK_API_KEY`: Auto-loads from `$OMD_ROOT/var/thruk/secret.key` if not set
   - `THRUK_BASE_URL`: Auto-configured to `http://127.0.0.1/$OMD_SITE` if not set

@@ -11,6 +11,6 @@ python-multipart>=0.0.6
 python-dotenv>=1.0.0
 
 # Optional dependencies (install separately when needed):
-# - For LLM integration: openai>=1.10.0 or anthropic>=0.18.0
+# - For LLM integration: openai>=1.10.0 or google-genai>=0.3.0
 # - For MCP integration: fastmcp>=0.2.0
 # See requirements-optional.txt for full list

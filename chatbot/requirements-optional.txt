@@ -1,9 +1,9 @@
 # Optional dependencies for LLM and MCP integration
 # Install these only when you need the features
 
-# LLM Integration - choose one or both
+# LLM Integration - choose one or more
 openai>=1.10.0        # For OpenAI-compatible APIs (ChatGPT, local models)
-anthropic>=0.18.0     # For Claude API
+google-genai>=0.3.0   # For Google Gemini API
 
 # MCP (Model Context Protocol) Integration
 # WARNING: This has MANY dependencies (100+ packages)

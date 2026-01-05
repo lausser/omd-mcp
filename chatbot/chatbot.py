@@ -39,7 +39,16 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-    logger.warning("OpenAI library not installed. LLM features will be disabled.")
+    logger.warning("OpenAI library not installed. OpenAI LLM features will be disabled.")
+
+# Try to import Gemini client (optional dependency)
+try:
+    from google import genai
+    from google.genai import types
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    logger.warning("Google GenAI library not installed. Gemini features will be disabled.")
 
 # Try to import MCP client (optional dependency)
 try:
@@ -55,21 +64,50 @@ SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "15"))
 DEFAULT_USERNAME = os.getenv("DEFAULT_USERNAME", "chatuser")
 SESSION_CLEANUP_INTERVAL = int(os.getenv("SESSION_CLEANUP_INTERVAL_SECONDS", "60"))
 
-# LLM configuration from environment
+# LLM Provider selection
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+
+# OpenAI configuration from environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
 
-# Initialize OpenAI client if available and configured
+# Gemini configuration from environment
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "")  # Empty = cloud
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_VERTEXAI = os.getenv("GEMINI_VERTEXAI", "false").lower() == "true"
+
+# Initialize LLM clients based on provider
 openai_client = None
-if OPENAI_AVAILABLE and OPENAI_API_KEY:
-    openai_client = AsyncOpenAI(
-        api_key=OPENAI_API_KEY,
-        base_url=OPENAI_BASE_URL
-    )
-    logger.info(f"OpenAI client initialized: {OPENAI_BASE_URL} / {OPENAI_MODEL}")
-elif OPENAI_AVAILABLE and not OPENAI_API_KEY:
-    logger.warning("OPENAI_API_KEY not set. LLM features will be disabled.")
+gemini_client = None
+
+if LLM_PROVIDER == "openai":
+    if OPENAI_AVAILABLE and OPENAI_API_KEY:
+        openai_client = AsyncOpenAI(
+            api_key=OPENAI_API_KEY,
+            base_url=OPENAI_BASE_URL
+        )
+        logger.info(f"OpenAI client initialized: {OPENAI_BASE_URL} / {OPENAI_MODEL}")
+    elif OPENAI_AVAILABLE and not OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY not set. LLM features will be disabled.")
+    elif not OPENAI_AVAILABLE:
+        logger.warning("OpenAI library not available. Please install: pip install openai>=1.10.0")
+elif LLM_PROVIDER == "gemini":
+    if GEMINI_AVAILABLE and GEMINI_API_KEY:
+        # Build client configuration
+        gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY,
+            vertexai=GEMINI_VERTEXAI,
+            http_options={"base_url": GEMINI_BASE_URL} if GEMINI_BASE_URL else None
+        )
+        logger.info(f"Gemini client initialized: {GEMINI_BASE_URL or 'cloud'} / {GEMINI_MODEL} (vertexai={GEMINI_VERTEXAI})")
+    elif GEMINI_AVAILABLE and not GEMINI_API_KEY:
+        logger.warning("GEMINI_API_KEY not set. LLM features will be disabled.")
+    elif not GEMINI_AVAILABLE:
+        logger.warning("Google GenAI library not available. Please install: pip install google-genai>=0.3.0")
+else:
+    logger.error(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}. Must be 'openai' or 'gemini'.")
 
 # Thruk MCP configuration - spawned as subprocess, auto-configures itself
 # The thruk_mcp.py script handles its own OMD environment detection and
@@ -281,10 +319,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(f"Default username: {DEFAULT_USERNAME}")
 
     # Log LLM status
-    if openai_client:
-        logger.info(f"LLM enabled: {OPENAI_MODEL} via {OPENAI_BASE_URL}")
+    if LLM_PROVIDER == "openai" and openai_client:
+        logger.info(f"LLM enabled: OpenAI - {OPENAI_MODEL} via {OPENAI_BASE_URL}")
+    elif LLM_PROVIDER == "gemini" and gemini_client:
+        logger.info(f"LLM enabled: Gemini - {GEMINI_MODEL} (cloud={not GEMINI_BASE_URL}, vertexai={GEMINI_VERTEXAI})")
     else:
-        logger.warning("LLM disabled: OpenAI client not configured")
+        logger.warning(f"LLM disabled: Provider '{LLM_PROVIDER}' not configured")
 
     # Initialize MCP tools if available (spawns thruk_mcp.py subprocess)
     mcp_tools = []
@@ -578,9 +618,10 @@ async def session_status(request: Request) -> Dict[str, Any]:
     }
 
 
-async def call_llm(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
+async def call_llm_openai(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Call LLM with conversation history and MCP tool support.
+    Call OpenAI-compatible LLM with conversation history and MCP tool support.
+    Uses manual tool calling loop.
 
     Args:
         conversation_history: List of Message objects
@@ -590,7 +631,7 @@ async def call_llm(conversation_history: List[Message], username: str) -> Tuple[
         Tuple of (assistant response text, list of tool calls made)
 
     Raises:
-        HTTPException: If LLM is not configured or API call fails
+        HTTPException: If OpenAI is not configured or API call fails
     """
     if not openai_client:
         raise HTTPException(
@@ -732,6 +773,156 @@ async def call_llm(conversation_history: List[Message], username: str) -> Tuple[
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"LLM API error: {str(e)}"
+        )
+
+
+async def call_llm_gemini(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
+    """
+    Call Google Gemini API with conversation history and MCP tool support.
+    Uses automatic function calling (SDK handles tool loop).
+
+    Args:
+        conversation_history: List of Message objects
+        username: Current user's username
+
+    Returns:
+        Tuple of (assistant response text, list of tool calls made)
+
+    Raises:
+        HTTPException: If Gemini is not configured or API call fails
+    """
+    if not gemini_client:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini service not configured. Please set GEMINI_API_KEY."
+        )
+
+    # Convert conversation history to Gemini format
+    # Gemini expects a single prompt or list of parts
+    # For multi-turn conversations, concatenate with clear delimiters
+    conversation_text = ""
+    for msg in conversation_history:
+        if msg.role == "user":
+            conversation_text += f"User: {msg.content}\n\n"
+        elif msg.role == "assistant":
+            conversation_text += f"Assistant: {msg.content}\n\n"
+
+    # Build system instruction
+    system_instruction = (
+        f"You are a helpful assistant for the Thruk monitoring system. "
+        f"The current user is: {username}. "
+        f"You have access to Thruk monitoring tools to query hosts, services, downtimes, and other monitoring data. "
+        f"Use the available tools when the user asks about monitoring information. "
+        f"Provide clear, concise answers about monitoring, hosts, services, and related topics."
+    )
+
+    logger.debug(f"Calling Gemini with conversation history and automatic function calling")
+
+    try:
+        # Find thruk_mcp.py path (same logic as get_mcp_tools)
+        if os.getenv("OMD_ROOT"):
+            thruk_mcp_path = os.path.join(os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py")
+        else:
+            thruk_mcp_path = os.path.join(os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.abspath(thruk_mcp_path)
+
+        if not os.path.exists(thruk_mcp_path):
+            logger.error(f"Thruk MCP server not found at {thruk_mcp_path}")
+            # Fall back to no tools
+            mcp_session = None
+        else:
+            # Create persistent MCP session for this API call
+            transport = PythonStdioTransport(thruk_mcp_path, env=os.environ.copy())
+            mcp_session = Client(transport)
+
+        # Call Gemini with automatic function calling
+        if mcp_session:
+            async with mcp_session:
+                response = await gemini_client.aio.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=conversation_text,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        tools=[mcp_session.session],  # Pass MCP session directly
+                        automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                            disable=False
+                        ),
+                        temperature=0.7,
+                        max_output_tokens=1000
+                    )
+                )
+        else:
+            # No tools available
+            response = await gemini_client.aio.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=conversation_text,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.7,
+                    max_output_tokens=1000
+                )
+            )
+
+        # Extract response text
+        assistant_message = response.text if response.text else ""
+
+        # Extract tool calls made (if available in response metadata)
+        # Note: Gemini's automatic function calling may not expose individual tool calls
+        # We'll log what we can but may not have full details
+        tool_calls_made = []
+
+        # Try to extract tool usage from response metadata
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            logger.debug(f"Gemini usage metadata: {response.usage_metadata}")
+
+        # Log candidates info for debugging
+        if hasattr(response, 'candidates') and response.candidates:
+            for i, candidate in enumerate(response.candidates):
+                logger.debug(f"Candidate {i}: finish_reason={candidate.finish_reason}")
+                if hasattr(candidate, 'function_calls') and candidate.function_calls:
+                    logger.info(f"Function calls made: {len(candidate.function_calls)}")
+                    for fc in candidate.function_calls:
+                        tool_calls_made.append({
+                            "tool": fc.name,
+                            "arguments": fc.args,
+                            "result": "(handled by Gemini SDK)"
+                        })
+
+        logger.debug(f"Gemini response received: {len(assistant_message)} characters")
+
+        return assistant_message, tool_calls_made
+
+    except Exception as e:
+        logger.error(f"Gemini API error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Gemini API error: {str(e)}"
+        )
+
+
+async def call_llm(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
+    """
+    Call LLM with conversation history and MCP tool support.
+    Routes to appropriate provider based on LLM_PROVIDER configuration.
+
+    Args:
+        conversation_history: List of Message objects
+        username: Current user's username
+
+    Returns:
+        Tuple of (assistant response text, list of tool calls made)
+
+    Raises:
+        HTTPException: If LLM is not configured or API call fails
+    """
+    if LLM_PROVIDER == "openai":
+        return await call_llm_openai(conversation_history, username)
+    elif LLM_PROVIDER == "gemini":
+        return await call_llm_gemini(conversation_history, username)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unknown LLM provider: {LLM_PROVIDER}"
         )
 
 
