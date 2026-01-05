@@ -89,10 +89,32 @@ Open browser: `https://your-server/testchatbot/chatbot/`
     │   └── README
     ├── init.d/chatbot         ← Service init script (0755)
     └── rc.d/91-chatbot -> ../init.d/chatbot
+
+/tmp/
+├── naemon-demo-hosts.cfg     ← Demo monitoring config
+└── naemon-demo-README.md     ← Demo config documentation
 ```
 
 **Note**: Code and templates are shared across all sites via symlinks.
 Each site has its own config in `etc/chatbot/` and packages in `local/lib/python/`.
+
+## Optional: Install Demo Configuration
+
+After installation, you can install the demo Naemon config for testing:
+
+```bash
+# As the site user
+su - testchatbot
+cp /tmp/naemon-demo-hosts.cfg etc/naemon/conf.d/demo-hosts.cfg
+omd reload naemon
+
+# Now you can test the chatbot with:
+# - "Show me all hosts"
+# - "Which hosts are down?"
+# - "What services are critical?"
+```
+
+See `/tmp/naemon-demo-README.md` for full demo config documentation.
 
 ## Tags Reference
 
@@ -105,6 +127,9 @@ ansible-playbook -i ansible/inventory ansible/install-chatbot.yml --tags shared
 
 # Install only skel files (config templates)
 ansible-playbook -i ansible/inventory ansible/install-chatbot.yml --tags skel
+
+# Install only demo configuration
+ansible-playbook -i ansible/inventory ansible/install-chatbot.yml --tags demo
 
 # Update code (affects all sites immediately - just restart)
 ansible-playbook -i ansible/inventory ansible/install-chatbot.yml --tags code

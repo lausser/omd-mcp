@@ -171,6 +171,31 @@ cd etc/chatbot
 etc/init.d/chatbot start
 ```
 
+### Optional: Demo Configuration
+
+The playbook copies a demo Naemon configuration to `/tmp/` for testing:
+
+```bash
+# As site user
+su - mysite
+
+# Install demo config
+cp /tmp/naemon-demo-hosts.cfg etc/naemon/conf.d/demo-hosts.cfg
+omd reload naemon
+
+# Test the chatbot with demo data:
+# - "Show me all hosts"
+# - "Which hosts are down?"
+# - "What services are critical?"
+```
+
+The demo config includes:
+- 7 hosts (5 Windows, 2 Linux)
+- Multiple services with realistic states (1 DOWN, 2 CRITICAL, 2 WARNING)
+- Host groups and service groups
+
+See `/tmp/naemon-demo-README.md` for full documentation.
+
 ## Playbook Variables
 
 | Variable | Default | Description |
@@ -200,6 +225,7 @@ ansible-playbook -i inventory install-chatbot.yml -e "chatbot_repo=/path/to/repo
 | `deps` | Update only dependency files |
 | `init` | Update only init scripts |
 | `docs` | Update only documentation |
+| `demo` | Install only demo Naemon configuration to /tmp/ |
 | `verify` | Run verification checks (use with `--tags verify`) |
 
 ## Updating Existing Installation

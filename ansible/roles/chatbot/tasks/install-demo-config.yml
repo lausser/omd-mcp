@@ -1,0 +1,33 @@
+---
+# Install demo Naemon configuration for testing
+
+- name: Copy demo Naemon configuration to /tmp
+  copy:
+    src: "{{ chatbot_repo }}/omd/demo-config/naemon-demo-hosts.cfg"
+    dest: /tmp/naemon-demo-hosts.cfg
+    mode: '0644'
+    owner: root
+    group: root
+  tags: [demo, demo-config]
+
+- name: Copy demo config README to /tmp
+  copy:
+    src: "{{ chatbot_repo }}/omd/demo-config/README.md"
+    dest: /tmp/naemon-demo-README.md
+    mode: '0644'
+    owner: root
+    group: root
+  tags: [demo, demo-config]
+
+- name: Display demo config installation message
+  debug:
+    msg: |
+      Demo Naemon configuration copied to /tmp/naemon-demo-hosts.cfg
+
+      To install in an OMD site:
+        su - SITENAME
+        cp /tmp/naemon-demo-hosts.cfg etc/naemon/conf.d/demo-hosts.cfg
+        omd reload naemon
+
+      See /tmp/naemon-demo-README.md for full instructions and test queries.
+  tags: [demo, demo-config]

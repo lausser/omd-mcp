@@ -13,6 +13,10 @@
   include_tasks: install-skel.yml
   tags: [skel]
 
+- name: Install demo configuration
+  include_tasks: install-demo-config.yml
+  tags: [demo, demo-config]
+
 - name: Verify installation
   include_tasks: verify.yml
   tags: [verify, never]
