@@ -44,9 +44,14 @@ else
     DEFAULT_USERNAME="chatuser"
     SESSION_CLEANUP_INTERVAL_SECONDS=60
     LOG_LEVEL="INFO"
+    LLM_PROVIDER="openai"
     OPENAI_API_KEY=""
     OPENAI_BASE_URL="https://api.openai.com/v1"
     OPENAI_MODEL="gpt-4"
+    GEMINI_API_KEY=""
+    GEMINI_BASE_URL=""
+    GEMINI_MODEL="gemini-2.5-flash"
+    GEMINI_VERTEXAI="false"
     THRUK_API_KEY=""
     THRUK_VERIFY_SSL="false"
 fi
@@ -58,9 +63,16 @@ export SESSION_CLEANUP_INTERVAL_SECONDS
 export LOG_LEVEL
 export PORT=$CHATBOT_PORT
 export HOST=$CHATBOT_HOST
+
+# LLM Provider Configuration
+export LLM_PROVIDER
 export OPENAI_API_KEY
 export OPENAI_BASE_URL
 export OPENAI_MODEL
+export GEMINI_API_KEY
+export GEMINI_BASE_URL
+export GEMINI_MODEL
+export GEMINI_VERTEXAI
 
 # Thruk MCP configuration (subprocess inherits these via env)
 export THRUK_API_KEY
