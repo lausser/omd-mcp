@@ -82,10 +82,19 @@ SESSION_CLEANUP_INTERVAL_SECONDS=60
 # Logging
 LOG_LEVEL="INFO"
 
-# LLM Configuration
+# LLM Provider Selection
+LLM_PROVIDER="openai"  # "openai" or "gemini"
+
+# OpenAI Configuration (when LLM_PROVIDER=openai)
 OPENAI_API_KEY=""
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_MODEL="gpt-4"
+
+# Gemini Configuration (when LLM_PROVIDER=gemini)
+GEMINI_API_KEY=""
+GEMINI_BASE_URL=""  # Empty for cloud, set for on-premise
+GEMINI_MODEL="gemini-2.5-flash"
+GEMINI_VERTEXAI="false"
 
 # Thruk MCP Integration
 THRUK_API_KEY=""
@@ -262,12 +271,19 @@ tail -f var/log/chatbot.log
 # Edit application config
 vi etc/chatbot/chatbot.conf
 
-# Set OpenAI configuration
+# Option 1: Configure for OpenAI
+LLM_PROVIDER="openai"
 OPENAI_API_KEY="sk-..."
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_MODEL="gpt-4o"
 
-# Or configure for local LLM
+# Option 2: Configure for Gemini (cloud)
+LLM_PROVIDER="gemini"
+GEMINI_API_KEY="your-gemini-api-key"
+GEMINI_MODEL="gemini-2.5-flash"
+
+# Option 3: Configure for local LLM
+LLM_PROVIDER="openai"
 OPENAI_API_KEY=""  # Not needed for local
 OPENAI_BASE_URL="http://localhost:1234/v1"
 OPENAI_MODEL="local-model"

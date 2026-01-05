@@ -79,11 +79,13 @@ fi
 
 echo
 echo "Installed packages:"
-python3 -m pip list | grep -E "(fastapi|uvicorn|jinja2|python-dotenv|openai|fastmcp)"
+python3 -m pip list | grep -E "(fastapi|uvicorn|jinja2|python-dotenv|openai|google-genai|fastmcp)"
 echo
 echo "Next steps:"
 echo "1. Configure chatbot: vi $OMD_ROOT/etc/chatbot/chatbot.conf"
-echo "2. Set OPENAI_API_KEY for LLM features"
+echo "2. Set LLM_PROVIDER (openai or gemini) and API key"
+echo "   - For OpenAI: Set OPENAI_API_KEY"
+echo "   - For Gemini: Set GEMINI_API_KEY"
 echo "3. Start chatbot: $OMD_ROOT/etc/init.d/chatbot start"
 echo "4. Check status: curl http://127.0.0.1:\$CONFIG_CHATBOT_TCP_PORT/health"
 echo

@@ -51,7 +51,9 @@ cd etc/chatbot
 
 # Configure API keys
 vi etc/chatbot/chatbot.conf
-# Set OPENAI_API_KEY, OPENAI_BASE_URL, etc.
+# Set LLM_PROVIDER (openai or gemini)
+# For OpenAI: Set OPENAI_API_KEY, OPENAI_BASE_URL, etc.
+# For Gemini: Set GEMINI_API_KEY, GEMINI_MODEL, etc.
 
 # Start chatbot
 etc/init.d/chatbot start

@@ -86,7 +86,7 @@ omd config set CHATBOT on
 
 # 4. Customize application settings (optional)
 vi etc/chatbot/chatbot.conf
-# Set OPENAI_API_KEY, etc.
+# Set LLM_PROVIDER, OPENAI_API_KEY or GEMINI_API_KEY, etc.
 
 # 5. Start site
 omd start

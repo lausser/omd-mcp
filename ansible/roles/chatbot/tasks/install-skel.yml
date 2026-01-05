@@ -98,9 +98,20 @@
       ## Configuration
 
       Edit chatbot.conf to set:
-      - OPENAI_API_KEY - Your LLM API key
-      - OPENAI_BASE_URL - API endpoint
-      - OPENAI_MODEL - Model to use
+      - LLM_PROVIDER - Choose "openai" or "gemini" (default: openai)
+
+      For OpenAI:
+      - OPENAI_API_KEY - Your OpenAI API key
+      - OPENAI_BASE_URL - API endpoint (default: https://api.openai.com/v1)
+      - OPENAI_MODEL - Model to use (default: gpt-4)
+
+      For Gemini:
+      - GEMINI_API_KEY - Your Gemini API key
+      - GEMINI_BASE_URL - Empty for cloud, set for on-premise
+      - GEMINI_MODEL - Model to use (default: gemini-2.5-flash)
+      - GEMINI_VERTEXAI - "true" for enterprise, "false" for cloud
+
+      Other settings:
       - LOG_LEVEL - Logging verbosity
 
       Then restart the chatbot:

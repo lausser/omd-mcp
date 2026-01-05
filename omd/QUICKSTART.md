@@ -45,15 +45,21 @@ The script will:
 - ✓ Configure Apache
 - ✓ Update site.conf
 
-### Step 4: Configure (Optional)
+### Step 4: Configure LLM Provider
 
 ```bash
-# Edit configuration if needed
-vi etc/omd/site.conf
+# Edit application configuration
+vi etc/chatbot/chatbot.conf
 
-# Set your OpenAI API key (or use local LLM)
-CONFIG_CHATBOT_OPENAI_API_KEY='sk-your-key-here'
-CONFIG_CHATBOT_OPENAI_MODEL='gpt-4o'
+# Option 1: Use OpenAI
+LLM_PROVIDER="openai"
+OPENAI_API_KEY="sk-your-key-here"
+OPENAI_MODEL="gpt-4o"
+
+# Option 2: Use Gemini
+LLM_PROVIDER="gemini"
+GEMINI_API_KEY="your-gemini-api-key"
+GEMINI_MODEL="gemini-2.5-flash"
 ```
 
 ### Step 5: Start Services
@@ -117,8 +123,8 @@ Check:
 
 ## Next Steps
 
-- **Configure LLM**: Set up OpenAI or local LLM in site.conf
-- **Customize**: Adjust ports, logging, timeouts in site.conf
+- **Configure LLM**: Set up OpenAI or Gemini in etc/chatbot/chatbot.conf
+- **Customize**: Adjust ports in site.conf, logging/timeouts in chatbot.conf
 - **Integrate MCP**: Set up Thruk MCP server for monitoring queries
 - **Monitor**: Check logs and set up alerts
 

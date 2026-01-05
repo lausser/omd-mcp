@@ -128,7 +128,7 @@ cp templates/chatbot.conf $OMD_ROOT/etc/chatbot/chatbot.conf
 Edit the configuration as needed:
 ```bash
 vi $OMD_ROOT/etc/chatbot/chatbot.conf
-# Set OPENAI_API_KEY and other settings
+# Set LLM_PROVIDER (openai or gemini) and API keys
 ```
 
 ### 7. Start Services
@@ -170,15 +170,22 @@ The default chatbot port is 8000. To change it:
 
 ### LLM Configuration
 
-Configure the OpenAI-compatible LLM backend in `etc/chatbot/chatbot.conf`:
+Configure the LLM backend in `etc/chatbot/chatbot.conf`:
 
 ```bash
-# For OpenAI
+# Option 1: OpenAI
+LLM_PROVIDER="openai"
 OPENAI_API_KEY="sk-..."
 OPENAI_BASE_URL="https://api.openai.com/v1"
 OPENAI_MODEL="gpt-4o"
 
-# For local LLM (e.g., LM Studio)
+# Option 2: Gemini (cloud)
+LLM_PROVIDER="gemini"
+GEMINI_API_KEY="your-gemini-api-key"
+GEMINI_MODEL="gemini-2.5-flash"
+
+# Option 3: Local LLM (e.g., LM Studio)
+LLM_PROVIDER="openai"
 OPENAI_API_KEY=""  # Not needed for local
 OPENAI_BASE_URL="http://localhost:1234/v1"
 OPENAI_MODEL="local-model"
