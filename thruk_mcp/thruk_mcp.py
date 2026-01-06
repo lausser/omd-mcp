@@ -137,59 +137,55 @@ async def get_thruk_status(username: str = "chatuser") -> dict[str, Any]:
     }
 
 
-# =============================================================================
-# Host Monitoring Tools
-# =============================================================================
 
-@mcp.tool()
-async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
+async def _api_request(
+    url: str,
+    username: str,
+    method: str = "GET",
+    data: dict = None,
+    headers: dict = None
+) -> dict[str, Any]:
     """
-    List all monitored hosts visible to the user.
+    Generic helper to make calls to Thruk API with centralized error handling.
 
     Args:
-        username: User session username for authorization (default: chatuser)
+        url: The full Thruk API URL
+        username: The user session username
+        method: HTTP method (GET, POST, etc.)
+        data: Request payload for POST/PUT requests
+        headers: Additional request headers
 
     Returns:
-        List of hosts with their status
+        A dictionary containing either the API response or an error message
     """
-    logger.info(
-        "thruk_list_hosts called",
-        extra={"username": username, "tool": "thruk_list_hosts"}
-    )
-
     # Validate configuration
     if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("=================")
-        for e in os.environ.keys():
-            if "THRUK" in e:
-                logger.error("->{} = {}".format(e, os.environ[e]))
-        logger.error("=================")
         logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
         return {
             "error": "Thruk API not configured",
             "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "environ": os.environ,
             "username": username
         }
 
-    # Prepare API request with column selection for essential data
-    # Columns: name, state, plugin_output, last_check, acknowledged, downtime_depth
-    url = f"{THRUK_BASE_URL}/r/hosts?columns=name,alias,address,state,plugin_output,last_check,acknowledged,scheduled_downtime_depth,groups"
-    headers = {
+    # Prepare default headers and merge with custom ones
+    final_headers = {
         "X-Thruk-Auth-Key": THRUK_API_KEY,
         "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
+        "Accept": "application/json",
     }
+    if headers:
+        final_headers.update(headers)
 
-    logger.debug(f"Calling Thruk API: GET {url}", extra={"username": username})
+    logger.debug(f"Calling Thruk API: {method} {url}", extra={"username": username})
 
     try:
         async with httpx.AsyncClient(
             verify=THRUK_VERIFY_SSL,
             timeout=30.0,
-            follow_redirects=True  # Handle HTTP->HTTPS redirects
+            follow_redirects=True
         ) as client:
-            response = await client.get(url, headers=headers)
+            # Select request method
+            response = await client.post(url, headers=final_headers, data=data) if method.upper() == "POST" else await client.get(url, headers=final_headers)
 
             # Log response status
             logger.debug(
@@ -211,47 +207,25 @@ async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
                 logger.error(f"Thruk API authorization failed for user {username} (403)")
                 return {
                     "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to list hosts",
+                    "message": f"User {username} does not have permission for this resource",
                     "username": username,
                     "status_code": 403
                 }
-
             # Raise for other HTTP errors
             response.raise_for_status()
 
-            # Parse JSON response
-            hosts_data = response.json()
-
-            # Filter sensitive data before returning
-            filtered_hosts = filter_sensitive_data(hosts_data)
-
-            logger.info(
-                f"Successfully fetched {len(filtered_hosts)} hosts from Thruk",
-                extra={"username": username, "host_count": len(filtered_hosts)}
-            )
-
-            return {
-                "hosts": filtered_hosts,
-                "count": len(filtered_hosts),
-                "username": username
-            }
+            # Parse JSON and return successful response
+            response_data = response.json()
+            return {"success": True, "data": filter_sensitive_data(response_data)}
 
     except httpx.TimeoutException as e:
         logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {
-            "error": "timeout",
-            "message": "Request to Thruk API timed out",
-            "username": username
-        }
+        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
 
     except httpx.ConnectError as e:
-        # Check if this is an SSL certificate error
         error_str = str(e)
         if "CERTIFICATE_VERIFY_FAILED" in error_str or "certificate verify failed" in error_str:
-            logger.error(
-                f"Thruk API SSL certificate verification failed: {e}",
-                extra={"username": username}
-            )
+            logger.error(f"Thruk API SSL certificate verification failed: {e}", extra={"username": username})
             return {
                 "error": "ssl_verification_failed",
                 "message": (
@@ -260,35 +234,70 @@ async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
                     f"Set THRUK_VERIFY_SSL=false to disable SSL verification."
                 ),
                 "username": username,
-                "current_verify_ssl": THRUK_VERIFY_SSL
+                "current_verify_ssl": THRUK_VERIFY_SSL,
             }
         else:
             logger.error(f"Thruk API connection error: {e}", extra={"username": username})
             return {
                 "error": "connection_failed",
                 "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}",
-                "username": username
+                "username": username,
             }
 
     except httpx.HTTPStatusError as e:
-        logger.error(
-            f"Thruk API HTTP error: {e.response.status_code}",
-            extra={"username": username, "status_code": e.response.status_code}
-        )
+        logger.error(f"Thruk API HTTP error: {e.response.status_code}", extra={"username": username, "status_code": e.response.status_code})
         return {
             "error": "http_error",
             "message": f"Thruk API returned error: {e.response.status_code}",
             "username": username,
-            "status_code": e.response.status_code
+            "status_code": e.response.status_code,
         }
 
     except Exception as e:
         logger.error(f"Unexpected error calling Thruk API: {e}", exc_info=True, extra={"username": username})
-        return {
-            "error": "unexpected_error",
-            "message": f"Unexpected error: {str(e)}",
-            "username": username
-        }
+        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
+
+
+# =============================================================================
+# Host Monitoring Tools
+# =============================================================================
+
+@mcp.tool()
+async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
+    """
+    List all monitored hosts visible to the user.
+
+    Args:
+        username: User session username for authorization (default: chatuser)
+
+    Returns:
+        List of hosts with their status
+    """
+    logger.info(
+        "thruk_list_hosts called",
+        extra={"username": username, "tool": "thruk_list_hosts"}
+    )
+
+    # Prepare API request details
+    url = f"{THRUK_BASE_URL}/r/hosts?columns=name,alias,address,state,plugin_output,last_check,acknowledged,scheduled_downtime_depth,groups"
+
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username)
+
+    # Process successful response
+    if not result.get("success"):
+        return result
+
+    hosts_data = result["data"]
+    logger.info(
+        f"Successfully fetched {len(hosts_data)} hosts from Thruk",
+        extra={"username": username, "host_count": len(hosts_data)}
+    )
+    return {
+        "hosts": hosts_data,
+        "count": len(hosts_data),
+        "username": username
+    }
 
 
 # =============================================================================
@@ -319,125 +328,30 @@ async def thruk_list_services(
         }
     )
 
-    # Validate configuration
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
-        return {
-            "error": "Thruk API not configured",
-            "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
-        }
-
-    # Prepare API request with column selection
-    # If hostname specified, filter by host_name
+    # Prepare API request details
     if hostname:
         url = f"{THRUK_BASE_URL}/r/services?host_name={hostname}&columns=host_name,description,state,plugin_output,last_check,acknowledged,scheduled_downtime_depth"
     else:
         url = f"{THRUK_BASE_URL}/r/services?columns=host_name,description,state,plugin_output,last_check,acknowledged,scheduled_downtime_depth"
 
-    headers = {
-        "X-Thruk-Auth-Key": THRUK_API_KEY,
-        "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username)
+
+    # Process successful response
+    if not result.get("success"):
+        return result
+
+    services_data = result["data"]
+    logger.info(
+        f"Successfully fetched {len(services_data)} services from Thruk",
+        extra={"username": username, "service_count": len(services_data)}
+    )
+    return {
+        "services": services_data,
+        "count": len(services_data),
+        "hostname": hostname if hostname else "all hosts",
+        "username": username
     }
-
-    logger.debug(f"Calling Thruk API: GET {url}", extra={"username": username})
-
-    try:
-        async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
-        ) as client:
-            response = await client.get(url, headers=headers)
-
-            # Check for authentication/authorization errors
-            if response.status_code == 401:
-                logger.error("Thruk API authentication failed (401)")
-                return {
-                    "error": "authentication_failed",
-                    "message": "Invalid API key or insufficient permissions",
-                    "username": username,
-                    "status_code": 401
-                }
-
-            if response.status_code == 403:
-                logger.error(f"Thruk API authorization failed for user {username} (403)")
-                return {
-                    "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to list services",
-                    "username": username,
-                    "status_code": 403
-                }
-
-            # Raise for other HTTP errors
-            response.raise_for_status()
-
-            # Parse JSON response and filter sensitive data
-            services_data = response.json()
-            filtered_services = filter_sensitive_data(services_data)
-
-            logger.info(
-                f"Successfully fetched {len(filtered_services)} services from Thruk",
-                extra={"username": username, "service_count": len(filtered_services)}
-            )
-
-            return {
-                "services": filtered_services,
-                "count": len(filtered_services),
-                "hostname": hostname if hostname else "all hosts",
-                "username": username
-            }
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {
-            "error": "timeout",
-            "message": "Request to Thruk API timed out",
-            "username": username
-        }
-
-    except httpx.ConnectError as e:
-        error_str = str(e)
-        if "CERTIFICATE_VERIFY_FAILED" in error_str or "certificate verify failed" in error_str:
-            logger.error(f"Thruk API SSL certificate verification failed: {e}", extra={"username": username})
-            return {
-                "error": "ssl_verification_failed",
-                "message": (
-                    f"SSL certificate verification failed for {THRUK_BASE_URL}. "
-                    f"This is likely a self-signed certificate. "
-                    f"Set THRUK_VERIFY_SSL=false to disable SSL verification."
-                ),
-                "username": username,
-                "current_verify_ssl": THRUK_VERIFY_SSL
-            }
-        else:
-            logger.error(f"Thruk API connection error: {e}", extra={"username": username})
-            return {
-                "error": "connection_failed",
-                "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}",
-                "username": username
-            }
-
-    except httpx.HTTPStatusError as e:
-        logger.error(
-            f"Thruk API HTTP error: {e.response.status_code}",
-            extra={"username": username, "status_code": e.response.status_code}
-        )
-        return {
-            "error": "http_error",
-            "message": f"Thruk API returned error: {e.response.status_code}",
-            "username": username,
-            "status_code": e.response.status_code
-        }
-
-    except Exception as e:
-        logger.error(f"Unexpected error calling Thruk API: {e}", exc_info=True, extra={"username": username})
-        return {
-            "error": "unexpected_error",
-            "message": f"Unexpected error: {str(e)}",
-            "username": username
-        }
 
 
 # =============================================================================
@@ -448,12 +362,6 @@ async def thruk_list_services(
 async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
     """
     List all host groups visible to the user.
-
-    Args:
-        username: User session username for authorization (default: chatuser)
-
-    Returns:
-        List of host groups with member counts
     """
     logger.info(
         "thruk_list_hostgroups called",
@@ -461,8 +369,11 @@ async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
     )
 
     # TODO: Implement actual Thruk API call
-    # URL: {THRUK_BASE_URL}/r/hostgroups
-    # Headers: X-Thruk-Auth-Key: {THRUK_API_KEY}, X-Thruk-Auth-User: {username}
+    # url = f"{THRUK_BASE_URL}/r/hostgroups"
+    # result = await _api_request(url=url, username=username)
+    # if result.get("success"):
+    #     return {"hostgroups": result["data"], "username": username}
+    # return result
 
     return {
         "hostgroups": [],
@@ -475,12 +386,6 @@ async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
 async def thruk_list_servicegroups(username: str = "chatuser") -> dict[str, Any]:
     """
     List all service groups visible to the user.
-
-    Args:
-        username: User session username for authorization (default: chatuser)
-
-    Returns:
-        List of service groups with member counts
     """
     logger.info(
         "thruk_list_servicegroups called",
@@ -488,8 +393,11 @@ async def thruk_list_servicegroups(username: str = "chatuser") -> dict[str, Any]
     )
 
     # TODO: Implement actual Thruk API call
-    # URL: {THRUK_BASE_URL}/r/servicegroups
-    # Headers: X-Thruk-Auth-Key: {THRUK_API_KEY}, X-Thruk-Auth-User: {username}
+    # url = f"{THRUK_BASE_URL}/r/servicegroups"
+    # result = await _api_request(url=url, username=username)
+    # if result.get("success"):
+    #     return {"servicegroups": result["data"], "username": username}
+    # return result
 
     return {
         "servicegroups": [],
@@ -518,74 +426,26 @@ async def thruk_list_downtimes(username: str = "chatuser") -> dict[str, Any]:
         extra={"username": username, "tool": "thruk_list_downtimes"}
     )
 
-    # Validate configuration
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
-        return {
-            "error": "Thruk API not configured",
-            "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
-        }
-
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/downtimes?columns=id,host_name,service_description,author,comment,start_time,end_time,duration,fixed"
-    headers = {
-        "X-Thruk-Auth-Key": THRUK_API_KEY,
-        "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
+
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username)
+
+    # Process successful response
+    if not result.get("success"):
+        return result
+
+    downtimes_data = result["data"]
+    logger.info(
+        f"Successfully fetched {len(downtimes_data)} downtimes from Thruk",
+        extra={"username": username, "downtime_count": len(downtimes_data)}
+    )
+    return {
+        "downtimes": downtimes_data,
+        "count": len(downtimes_data),
+        "username": username
     }
-
-    logger.debug(f"Calling Thruk API: GET {url}", extra={"username": username})
-
-    try:
-        async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
-        ) as client:
-            response = await client.get(url, headers=headers)
-
-            if response.status_code == 401:
-                return {
-                    "error": "authentication_failed",
-                    "message": "Invalid API key or insufficient permissions",
-                    "username": username
-                }
-
-            if response.status_code == 403:
-                return {
-                    "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to list downtimes",
-                    "username": username
-                }
-
-            response.raise_for_status()
-
-            downtimes_data = response.json()
-            filtered_downtimes = filter_sensitive_data(downtimes_data)
-
-            logger.info(
-                f"Successfully fetched {len(filtered_downtimes)} downtimes from Thruk",
-                extra={"username": username, "downtime_count": len(filtered_downtimes)}
-            )
-
-            return {
-                "downtimes": filtered_downtimes,
-                "count": len(filtered_downtimes),
-                "username": username
-            }
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
-
-    except httpx.ConnectError as e:
-        logger.error(f"Thruk API connection error: {e}", extra={"username": username})
-        return {"error": "connection_failed", "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}", "username": username}
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True, extra={"username": username})
-        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
 
 
 @mcp.tool()
@@ -604,74 +464,26 @@ async def thruk_list_comments(username: str = "chatuser") -> dict[str, Any]:
         extra={"username": username, "tool": "thruk_list_comments"}
     )
 
-    # Validate configuration
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
-        return {
-            "error": "Thruk API not configured",
-            "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
-        }
-
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/comments?columns=id,host_name,service_description,author,comment,entry_time,persistent"
-    headers = {
-        "X-Thruk-Auth-Key": THRUK_API_KEY,
-        "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
+
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username)
+
+    # Process successful response
+    if not result.get("success"):
+        return result
+
+    comments_data = result["data"]
+    logger.info(
+        f"Successfully fetched {len(comments_data)} comments from Thruk",
+        extra={"username": username, "comment_count": len(comments_data)}
+    )
+    return {
+        "comments": comments_data,
+        "count": len(comments_data),
+        "username": username
     }
-
-    logger.debug(f"Calling Thruk API: GET {url}", extra={"username": username})
-
-    try:
-        async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
-        ) as client:
-            response = await client.get(url, headers=headers)
-
-            if response.status_code == 401:
-                return {
-                    "error": "authentication_failed",
-                    "message": "Invalid API key or insufficient permissions",
-                    "username": username
-                }
-
-            if response.status_code == 403:
-                return {
-                    "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to list comments",
-                    "username": username
-                }
-
-            response.raise_for_status()
-
-            comments_data = response.json()
-            filtered_comments = filter_sensitive_data(comments_data)
-
-            logger.info(
-                f"Successfully fetched {len(filtered_comments)} comments from Thruk",
-                extra={"username": username, "comment_count": len(filtered_comments)}
-            )
-
-            return {
-                "comments": filtered_comments,
-                "count": len(filtered_comments),
-                "username": username
-            }
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
-
-    except httpx.ConnectError as e:
-        logger.error(f"Thruk API connection error: {e}", extra={"username": username})
-        return {"error": "connection_failed", "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}", "username": username}
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True, extra={"username": username})
-        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
 
 
 @mcp.tool()
@@ -703,24 +515,8 @@ async def thruk_schedule_host_downtime(
         }
     )
 
-    # Validate configuration
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
-        return {
-            "error": "Thruk API not configured",
-            "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
-        }
-
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/hosts/{hostname}/cmd/schedule_host_downtime"
-    headers = {
-        "X-Thruk-Auth-Key": THRUK_API_KEY,
-        "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
-    }
-
-    # POST data with relative time format
     data = {
         "start_time": "now",
         "end_time": f"+{duration_minutes}m",
@@ -729,60 +525,26 @@ async def thruk_schedule_host_downtime(
         "fixed": "1"  # Fixed downtime
     }
 
-    logger.debug(f"Calling Thruk API: POST {url}", extra={"username": username, "data": data})
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username, method="POST", data=data)
 
-    try:
-        async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
-        ) as client:
-            response = await client.post(url, headers=headers, data=data)
+    # Process successful response
+    if not result.get("success"):
+        return result
 
-            if response.status_code == 401:
-                return {
-                    "error": "authentication_failed",
-                    "message": "Invalid API key or insufficient permissions",
-                    "username": username
-                }
-
-            if response.status_code == 403:
-                return {
-                    "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to schedule downtime for {hostname}",
-                    "username": username
-                }
-
-            response.raise_for_status()
-
-            result = response.json()
-
-            logger.info(
-                f"Successfully scheduled downtime for host {hostname}",
-                extra={"username": username, "hostname": hostname, "duration_minutes": duration_minutes}
-            )
-
-            return {
-                "success": True,
-                "hostname": hostname,
-                "duration_minutes": duration_minutes,
-                "comment": comment,
-                "author": username,
-                "result": result,
-                "username": username
-            }
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
-
-    except httpx.ConnectError as e:
-        logger.error(f"Thruk API connection error: {e}", extra={"username": username})
-        return {"error": "connection_failed", "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}", "username": username}
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True, extra={"username": username})
-        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
+    logger.info(
+        f"Successfully scheduled downtime for host {hostname}",
+        extra={"username": username, "hostname": hostname, "duration_minutes": duration_minutes}
+    )
+    return {
+        "success": True,
+        "hostname": hostname,
+        "duration_minutes": duration_minutes,
+        "comment": comment,
+        "author": username,
+        "result": result["data"],
+        "username": username
+    }
 
 
 @mcp.tool()
@@ -817,28 +579,12 @@ async def thruk_schedule_service_downtime(
         }
     )
 
-    # Validate configuration
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
-        return {
-            "error": "Thruk API not configured",
-            "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
-        }
-
     # URL encode service description for URL path
     from urllib.parse import quote
     service_encoded = quote(service_description, safe='')
 
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/services/{hostname}/{service_encoded}/cmd/schedule_svc_downtime"
-    headers = {
-        "X-Thruk-Auth-Key": THRUK_API_KEY,
-        "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
-    }
-
-    # POST data with relative time format
     data = {
         "start_time": "now",
         "end_time": f"+{duration_minutes}m",
@@ -847,61 +593,27 @@ async def thruk_schedule_service_downtime(
         "fixed": "1"  # Fixed downtime
     }
 
-    logger.debug(f"Calling Thruk API: POST {url}", extra={"username": username})
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username, method="POST", data=data)
 
-    try:
-        async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
-        ) as client:
-            response = await client.post(url, headers=headers, data=data)
+    # Process successful response
+    if not result.get("success"):
+        return result
 
-            if response.status_code == 401:
-                return {
-                    "error": "authentication_failed",
-                    "message": "Invalid API key or insufficient permissions",
-                    "username": username
-                }
-
-            if response.status_code == 403:
-                return {
-                    "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to schedule downtime for {hostname}/{service_description}",
-                    "username": username
-                }
-
-            response.raise_for_status()
-
-            result = response.json()
-
-            logger.info(
-                f"Successfully scheduled downtime for service {hostname}/{service_description}",
-                extra={"username": username, "hostname": hostname, "service": service_description}
-            )
-
-            return {
-                "success": True,
-                "hostname": hostname,
-                "service_description": service_description,
-                "duration_minutes": duration_minutes,
-                "comment": comment,
-                "author": username,
-                "result": result,
-                "username": username
-            }
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
-
-    except httpx.ConnectError as e:
-        logger.error(f"Thruk API connection error: {e}", extra={"username": username})
-        return {"error": "connection_failed", "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}", "username": username}
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True, extra={"username": username})
-        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
+    logger.info(
+        f"Successfully scheduled downtime for service {hostname}/{service_description}",
+        extra={"username": username, "hostname": hostname, "service": service_description}
+    )
+    return {
+        "success": True,
+        "hostname": hostname,
+        "service_description": service_description,
+        "duration_minutes": duration_minutes,
+        "comment": comment,
+        "author": username,
+        "result": result["data"],
+        "username": username
+    }
 
 
 @mcp.tool()
@@ -933,24 +645,8 @@ async def thruk_schedule_hostgroup_downtime(
         }
     )
 
-    # Validate configuration
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
-        return {
-            "error": "Thruk API not configured",
-            "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
-        }
-
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup}/cmd/schedule_hostgroup_host_downtime"
-    headers = {
-        "X-Thruk-Auth-Key": THRUK_API_KEY,
-        "X-Thruk-Auth-User": username,
-        "Accept": "application/json"
-    }
-
-    # POST data with relative time format
     data = {
         "start_time": "now",
         "end_time": f"+{duration_minutes}m",
@@ -959,60 +655,26 @@ async def thruk_schedule_hostgroup_downtime(
         "fixed": "1"  # Fixed downtime
     }
 
-    logger.debug(f"Calling Thruk API: POST {url}", extra={"username": username})
+    # Call the generic API request handler
+    result = await _api_request(url=url, username=username, method="POST", data=data)
 
-    try:
-        async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
-        ) as client:
-            response = await client.post(url, headers=headers, data=data)
+    # Process successful response
+    if not result.get("success"):
+        return result
 
-            if response.status_code == 401:
-                return {
-                    "error": "authentication_failed",
-                    "message": "Invalid API key or insufficient permissions",
-                    "username": username
-                }
-
-            if response.status_code == 403:
-                return {
-                    "error": "authorization_failed",
-                    "message": f"User {username} does not have permission to schedule downtime for hostgroup {hostgroup}",
-                    "username": username
-                }
-
-            response.raise_for_status()
-
-            result = response.json()
-
-            logger.info(
-                f"Successfully scheduled downtime for hostgroup {hostgroup}",
-                extra={"username": username, "hostgroup": hostgroup, "duration_minutes": duration_minutes}
-            )
-
-            return {
-                "success": True,
-                "hostgroup": hostgroup,
-                "duration_minutes": duration_minutes,
-                "comment": comment,
-                "author": username,
-                "result": result,
-                "username": username
-            }
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
-
-    except httpx.ConnectError as e:
-        logger.error(f"Thruk API connection error: {e}", extra={"username": username})
-        return {"error": "connection_failed", "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}", "username": username}
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True, extra={"username": username})
-        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
+    logger.info(
+        f"Successfully scheduled downtime for hostgroup {hostgroup}",
+        extra={"username": username, "hostgroup": hostgroup, "duration_minutes": duration_minutes}
+    )
+    return {
+        "success": True,
+        "hostgroup": hostgroup,
+        "duration_minutes": duration_minutes,
+        "comment": comment,
+        "author": username,
+        "result": result["data"],
+        "username": username
+    }
 
 
 @mcp.tool()
@@ -1024,15 +686,6 @@ async def thruk_schedule_servicegroup_downtime(
 ) -> dict[str, Any]:
     """
     Schedule downtime for all services in a servicegroup.
-
-    Args:
-        servicegroup: Name of the servicegroup
-        duration_minutes: Duration of downtime in minutes
-        comment: Reason for the downtime
-        username: User session username for authorization (default: chatuser)
-
-    Returns:
-        Confirmation of scheduled downtime for all services in the group
     """
     logger.info(
         "thruk_schedule_servicegroup_downtime called",
@@ -1044,10 +697,23 @@ async def thruk_schedule_servicegroup_downtime(
         }
     )
 
-    # TODO: Implement actual Thruk API call
-    # URL: {THRUK_BASE_URL}/r/servicegroups/{servicegroup}/cmd/schedule_servicegroup_downtime
-    # Headers: X-Thruk-Auth-Key: {THRUK_API_KEY}, X-Thruk-Auth-User: {username}
-    # Body: {duration: duration_minutes, comment: comment}
+    # Note: This is a placeholder for a future implementation.
+    # The real implementation would use the _api_request helper like the other functions.
+    # For example:
+    #
+    # url = f"{THRUK_BASE_URL}/r/servicegroups/{servicegroup}/cmd/schedule_servicegroup_svc_downtime"
+    # data = {
+    #     "start_time": "now",
+    #     "end_time": f"+{duration_minutes}m",
+    #     "comment": comment,
+    #     "author": username,
+    #     "fixed": "1"
+    # }
+    # result = await _api_request(url=url, username=username, method="POST", data=data)
+    #
+    # if result.get("success"):
+    #     return {"success": True, "servicegroup": servicegroup, ...}
+    # return result
 
     return {
         "servicegroup": servicegroup,
@@ -1060,12 +726,7 @@ async def thruk_schedule_servicegroup_downtime(
 
 def main():
     """Main entry point for the MCP server (stdio transport)."""
-    logger.info(f"Starting Thruk MCP server (stdio transport)")
-    logger.info(f"Thruk Base URL: {THRUK_BASE_URL or 'NOT CONFIGURED'}")
-
-    if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.warning("THRUK_BASE_URL or THRUK_API_KEY not configured")
-
+    logger.info("Starting Thruk MCP server (stdio transport)")
     # Run the FastMCP server with stdio transport (spawned by chatbot)
     try:
         mcp.run(transport="stdio")
