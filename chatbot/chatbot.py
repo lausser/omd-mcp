@@ -33,6 +33,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress noisy DEBUG logs from third-party libraries
+# FastMCP subprocess logs (docket.worker, fakeredis, mcp.server) create excessive log spam
+logging.getLogger("docket.worker").setLevel(logging.WARNING)
+logging.getLogger("fakeredis").setLevel(logging.WARNING)
+logging.getLogger("mcp.server").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # Try to import OpenAI client (optional dependency)
 try:
     from openai import AsyncOpenAI
