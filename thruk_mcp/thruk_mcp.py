@@ -9,10 +9,15 @@ import os
 import sys
 import asyncio
 import logging
+import warnings
 from typing import Any
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 import httpx
+
+# Suppress deprecation warnings from third-party dependencies
+# jsonpath_ng has invalid escape sequences that will be fixed in their next release
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="jsonpath_ng")
 
 # Load environment variables
 load_dotenv()
