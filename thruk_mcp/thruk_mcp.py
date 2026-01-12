@@ -34,8 +34,9 @@ OMD_SITE = os.getenv("OMD_SITE", "")
 # Auto-configure THRUK_BASE_URL if in OMD environment
 THRUK_BASE_URL = os.getenv("THRUK_BASE_URL", "")
 if not THRUK_BASE_URL and OMD_ROOT:
-    # OMD environment: use local Thruk installation
-    THRUK_BASE_URL = f"http://127.0.0.1/{OMD_SITE}/thruk" if OMD_SITE else "http://127.0.0.1/thruk"
+    # OMD environment: use local Thruk installation via HTTPS to avoid redirect issues
+    # Note: SSL verification is disabled via THRUK_VERIFY_SSL=false for self-signed certs
+    THRUK_BASE_URL = f"https://127.0.0.1/{OMD_SITE}/thruk" if OMD_SITE else "https://127.0.0.1/thruk"
     logger.info(f"Auto-configured THRUK_BASE_URL: {THRUK_BASE_URL}")
 
 # THRUK_API_KEY can be either:
@@ -245,10 +246,20 @@ async def _api_request(
             }
 
     except httpx.HTTPStatusError as e:
-        logger.error(f"Thruk API HTTP error: {e.response.status_code}", extra={"username": username, "status_code": e.response.status_code})
+        # Try to get the error message from the response body
+        try:
+            error_body = e.response.json() if e.response.headers.get("content-type", "").startswith("application/json") else e.response.text
+        except Exception:
+            error_body = e.response.text
+
+        logger.error(
+            f"Thruk API HTTP error: {e.response.status_code} - {error_body}",
+            extra={"username": username, "status_code": e.response.status_code, "response_body": error_body}
+        )
         return {
             "error": "http_error",
             "message": f"Thruk API returned error: {e.response.status_code}",
+            "details": error_body,
             "username": username,
             "status_code": e.response.status_code,
         }
@@ -520,8 +531,8 @@ async def thruk_schedule_host_downtime(
     data = {
         "start_time": "now",
         "end_time": f"+{duration_minutes}m",
-        "comment": comment,
-        "author": username,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "fixed": "1"  # Fixed downtime
     }
 
@@ -540,8 +551,8 @@ async def thruk_schedule_host_downtime(
         "success": True,
         "hostname": hostname,
         "duration_minutes": duration_minutes,
-        "comment": comment,
-        "author": username,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "result": result["data"],
         "username": username
     }
@@ -588,8 +599,8 @@ async def thruk_schedule_service_downtime(
     data = {
         "start_time": "now",
         "end_time": f"+{duration_minutes}m",
-        "comment": comment,
-        "author": username,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "fixed": "1"  # Fixed downtime
     }
 
@@ -609,8 +620,8 @@ async def thruk_schedule_service_downtime(
         "hostname": hostname,
         "service_description": service_description,
         "duration_minutes": duration_minutes,
-        "comment": comment,
-        "author": username,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "result": result["data"],
         "username": username
     }
@@ -650,8 +661,8 @@ async def thruk_schedule_hostgroup_downtime(
     data = {
         "start_time": "now",
         "end_time": f"+{duration_minutes}m",
-        "comment": comment,
-        "author": username,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "fixed": "1"  # Fixed downtime
     }
 
@@ -670,8 +681,8 @@ async def thruk_schedule_hostgroup_downtime(
         "success": True,
         "hostgroup": hostgroup,
         "duration_minutes": duration_minutes,
-        "comment": comment,
-        "author": username,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "result": result["data"],
         "username": username
     }
@@ -705,8 +716,8 @@ async def thruk_schedule_servicegroup_downtime(
     # data = {
     #     "start_time": "now",
     #     "end_time": f"+{duration_minutes}m",
-    #     "comment": comment,
-    #     "author": username,
+    #     "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
+    #     "comment_author": username,  # Thruk expects 'comment_author', not 'author'
     #     "fixed": "1"
     # }
     # result = await _api_request(url=url, username=username, method="POST", data=data)
@@ -718,7 +729,7 @@ async def thruk_schedule_servicegroup_downtime(
     return {
         "servicegroup": servicegroup,
         "duration_minutes": duration_minutes,
-        "comment": comment,
+        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "username": username,
         "note": "Placeholder - implement Thruk schedule_servicegroup_downtime command"
     }
