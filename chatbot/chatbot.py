@@ -652,7 +652,15 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
                   f"The current user is: {username}. "
                   f"You have access to Thruk monitoring tools to query hosts, services, downtimes, and other monitoring data. "
                   f"Use the available tools when the user asks about monitoring information. "
-                  f"Provide clear, concise answers about monitoring, hosts, services, and related topics."
+                  f"Provide clear, concise answers about monitoring, hosts, services, and related topics.\n\n"
+                  f"IMPORTANT ERROR HANDLING:\n"
+                  f"- If a tool returns an error (e.g., 'error' field in response), YOU MUST report this error to the user clearly.\n"
+                  f"- Never claim success when a tool returned an error.\n"
+                  f"- If an error mentions validation failures or invalid names, explain what was wrong.\n\n"
+                  f"DOWNTIME VERIFICATION:\n"
+                  f"- After scheduling any downtime (host, service, hostgroup, servicegroup), if no error occurred, "
+                  f"immediately call thruk_list_downtimes to verify the downtime was actually created.\n"
+                  f"- Only report success after confirming the downtime appears in the active downtimes list."
     }
     messages.insert(0, system_message)
 
@@ -813,7 +821,15 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
         f"The current user is: {username}. "
         f"You have access to Thruk monitoring tools to query hosts, services, downtimes, and other monitoring data. "
         f"Use the available tools when the user asks about monitoring information. "
-        f"Provide clear, concise answers about monitoring, hosts, services, and related topics."
+        f"Provide clear, concise answers about monitoring, hosts, services, and related topics.\n\n"
+        f"IMPORTANT ERROR HANDLING:\n"
+        f"- If a tool returns an error (e.g., 'error' field in response), YOU MUST report this error to the user clearly.\n"
+        f"- Never claim success when a tool returned an error.\n"
+        f"- If an error mentions validation failures or invalid names, explain what was wrong.\n\n"
+        f"DOWNTIME VERIFICATION:\n"
+        f"- After scheduling any downtime (host, service, hostgroup, servicegroup), if no error occurred, "
+        f"immediately call thruk_list_downtimes to verify the downtime was actually created.\n"
+        f"- Only report success after confirming the downtime appears in the active downtimes list."
     )
 
     logger.debug(f"Calling Gemini with conversation history and automatic function calling")
