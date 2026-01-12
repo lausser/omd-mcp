@@ -461,9 +461,9 @@ async def index(request: Request, response: Response) -> HTMLResponse:
 
     # Set session cookie
     response = templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "username": username,
             "session_id": session.session_id[:8],  # Truncated for display
             "session_timeout_minutes": SESSION_TIMEOUT_MINUTES  # For heartbeat calculation
