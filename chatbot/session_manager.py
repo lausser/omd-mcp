@@ -31,6 +31,7 @@ class Message:
         timestamp: When message was sent/received
         metadata: Optional metadata (MCP tool calls, errors, etc.)
     """
+
     role: Literal["user", "assistant", "system"]
     content: str
     timestamp: datetime = field(default_factory=datetime.now)
@@ -59,6 +60,7 @@ class UserSession:
         conversation_history: Chat message history
         is_active: Whether session is currently active (not timed out)
     """
+
     session_id: str
     username: str
     created_at: datetime = field(default_factory=datetime.now)
@@ -101,8 +103,8 @@ class UserSession:
             extra={
                 "session_id": self.session_id[:8],
                 "username": self.username,
-                "last_activity": self.last_activity.isoformat()
-            }
+                "last_activity": self.last_activity.isoformat(),
+            },
         )
 
     def cleanup(self) -> None:
@@ -117,8 +119,8 @@ class UserSession:
             extra={
                 "session_id": self.session_id[:8],
                 "username": self.username,
-                "age_seconds": (datetime.now() - self.created_at).total_seconds()
-            }
+                "age_seconds": (datetime.now() - self.created_at).total_seconds(),
+            },
         )
 
         # Close MCP connection
@@ -131,7 +133,7 @@ class UserSession:
             except Exception as e:
                 logger.error(
                     f"Error closing MCP connection: {e}",
-                    extra={"session_id": self.session_id[:8]}
+                    extra={"session_id": self.session_id[:8]},
                 )
 
         # Close LLM connection
@@ -144,7 +146,7 @@ class UserSession:
             except Exception as e:
                 logger.error(
                     f"Error closing LLM connection: {e}",
-                    extra={"session_id": self.session_id[:8]}
+                    extra={"session_id": self.session_id[:8]},
                 )
 
         # Clear conversation history
@@ -152,7 +154,7 @@ class UserSession:
         self.conversation_history.clear()
         logger.debug(
             f"Cleared {messages_count} messages from conversation history",
-            extra={"session_id": self.session_id[:8]}
+            extra={"session_id": self.session_id[:8]},
         )
 
         self.is_active = False
@@ -186,8 +188,8 @@ class SessionStore:
             "SessionStore initialized",
             extra={
                 "timeout_minutes": timeout_minutes,
-                "cleanup_interval_seconds": cleanup_interval_seconds
-            }
+                "cleanup_interval_seconds": cleanup_interval_seconds,
+            },
         )
 
     def create_session(self, username: str) -> UserSession:
@@ -210,7 +212,7 @@ class SessionStore:
         session = UserSession(
             session_id=session_id,
             username=username,
-            timeout_minutes=self.timeout_minutes
+            timeout_minutes=self.timeout_minutes,
         )
 
         with self.lock:
@@ -221,8 +223,8 @@ class SessionStore:
             extra={
                 "session_id": session_id[:8],
                 "username": username,
-                "total_sessions": len(self.sessions)
-            }
+                "total_sessions": len(self.sessions),
+            },
         )
 
         return session
@@ -288,8 +290,8 @@ class SessionStore:
                 f"Cleaned up {cleaned_count} expired sessions",
                 extra={
                     "cleaned_count": cleaned_count,
-                    "remaining_sessions": len(self.sessions)
-                }
+                    "remaining_sessions": len(self.sessions),
+                },
             )
 
         return cleaned_count
@@ -310,8 +312,7 @@ class SessionStore:
                 session.cleanup()
                 del self.sessions[session_id]
                 logger.info(
-                    "Session explicitly removed",
-                    extra={"session_id": session_id[:8]}
+                    "Session explicitly removed", extra={"session_id": session_id[:8]}
                 )
                 return True
         return False

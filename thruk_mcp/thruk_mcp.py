@@ -25,7 +25,7 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,9 @@ THRUK_BASE_URL = os.getenv("THRUK_BASE_URL", "")
 if not THRUK_BASE_URL and OMD_ROOT:
     # OMD environment: use local Thruk installation via HTTPS to avoid redirect issues
     # Note: SSL verification is disabled via THRUK_VERIFY_SSL=false for self-signed certs
-    THRUK_BASE_URL = f"https://127.0.0.1/{OMD_SITE}/thruk" if OMD_SITE else "https://127.0.0.1/thruk"
+    THRUK_BASE_URL = (
+        f"https://127.0.0.1/{OMD_SITE}/thruk" if OMD_SITE else "https://127.0.0.1/thruk"
+    )
     logger.info(f"Auto-configured THRUK_BASE_URL: {THRUK_BASE_URL}")
 
 # THRUK_API_KEY can be either:
@@ -55,7 +57,7 @@ if not THRUK_API_KEY and OMD_ROOT:
     secret_key_path = os.path.join(OMD_ROOT, "var", "thruk", "secret.key")
     if os.path.exists(secret_key_path):
         try:
-            with open(secret_key_path, 'r') as f:
+            with open(secret_key_path, "r") as f:
                 THRUK_API_KEY = f.read().strip()
             logger.info(f"Auto-loaded THRUK_API_KEY from {secret_key_path}")
         except Exception as e:
@@ -68,12 +70,15 @@ logger.info(f"Thruk MCP Server starting...")
 logger.info(f"  THRUK_BASE_URL: {THRUK_BASE_URL if THRUK_BASE_URL else 'NOT SET'}")
 logger.info(f"  THRUK_API_KEY: {'SET' if THRUK_API_KEY else 'NOT SET'}")
 logger.info(f"  THRUK_VERIFY_SSL: {THRUK_VERIFY_SSL}")
-logger.info(f"  OMD_ROOT: {OMD_ROOT if OMD_ROOT else 'NOT SET (not in OMD environment)'}")
+logger.info(
+    f"  OMD_ROOT: {OMD_ROOT if OMD_ROOT else 'NOT SET (not in OMD environment)'}"
+)
 
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def filter_sensitive_data(data: Any) -> Any:
     """
@@ -92,7 +97,17 @@ def filter_sensitive_data(data: Any) -> Any:
         for key, value in data.items():
             # Skip custom variables starting with _ that might contain sensitive data
             key_lower = key.lower()
-            if any(sensitive in key_lower for sensitive in ['password', 'passwd', 'secret', 'key', 'token', 'credential']):
+            if any(
+                sensitive in key_lower
+                for sensitive in [
+                    "password",
+                    "passwd",
+                    "secret",
+                    "key",
+                    "token",
+                    "credential",
+                ]
+            ):
                 # Don't include sensitive fields
                 continue
             else:
@@ -117,7 +132,7 @@ async def health_check() -> dict[str, Any]:
         "status": "healthy",
         "service": "thruk-mcp",
         "version": "1.0.0",
-        "thruk_configured": bool(THRUK_BASE_URL and THRUK_API_KEY)
+        "thruk_configured": bool(THRUK_BASE_URL and THRUK_API_KEY),
     }
 
 
@@ -134,14 +149,13 @@ async def get_thruk_status(username: str = "chatuser") -> dict[str, Any]:
     """
     logger.info(
         "get_thruk_status called",
-        extra={"username": username, "tool": "get_thruk_status"}
+        extra={"username": username, "tool": "get_thruk_status"},
     )
     return {
         "message": "Thruk MCP server is running",
         "username": username,
-        "note": "This is a placeholder. Implement full Thruk API integration."
+        "note": "This is a placeholder. Implement full Thruk API integration.",
     }
-
 
 
 async def _api_request(
@@ -149,7 +163,7 @@ async def _api_request(
     username: str,
     method: str = "GET",
     data: dict = None,
-    headers: dict = None
+    headers: dict = None,
 ) -> dict[str, Any]:
     """
     Generic helper to make calls to Thruk API with centralized error handling.
@@ -166,11 +180,13 @@ async def _api_request(
     """
     # Validate configuration
     if not THRUK_BASE_URL or not THRUK_API_KEY:
-        logger.error("Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)")
+        logger.error(
+            "Thruk API not configured (missing THRUK_BASE_URL or THRUK_API_KEY)"
+        )
         return {
             "error": "Thruk API not configured",
             "message": "THRUK_BASE_URL and THRUK_API_KEY must be set",
-            "username": username
+            "username": username,
         }
 
     # Prepare default headers and merge with custom ones
@@ -186,17 +202,19 @@ async def _api_request(
 
     try:
         async with httpx.AsyncClient(
-            verify=THRUK_VERIFY_SSL,
-            timeout=30.0,
-            follow_redirects=True
+            verify=THRUK_VERIFY_SSL, timeout=30.0, follow_redirects=True
         ) as client:
             # Select request method
-            response = await client.post(url, headers=final_headers, data=data) if method.upper() == "POST" else await client.get(url, headers=final_headers)
+            response = (
+                await client.post(url, headers=final_headers, data=data)
+                if method.upper() == "POST"
+                else await client.get(url, headers=final_headers)
+            )
 
             # Log response status
             logger.debug(
                 f"Thruk API response: {response.status_code}",
-                extra={"username": username, "status_code": response.status_code}
+                extra={"username": username, "status_code": response.status_code},
             )
 
             # Check for authentication/authorization errors
@@ -206,16 +224,18 @@ async def _api_request(
                     "error": "authentication_failed",
                     "message": "Invalid API key or insufficient permissions",
                     "username": username,
-                    "status_code": 401
+                    "status_code": 401,
                 }
 
             if response.status_code == 403:
-                logger.error(f"Thruk API authorization failed for user {username} (403)")
+                logger.error(
+                    f"Thruk API authorization failed for user {username} (403)"
+                )
                 return {
                     "error": "authorization_failed",
                     "message": f"User {username} does not have permission for this resource",
                     "username": username,
-                    "status_code": 403
+                    "status_code": 403,
                 }
             # Raise for other HTTP errors
             response.raise_for_status()
@@ -226,12 +246,22 @@ async def _api_request(
 
     except httpx.TimeoutException as e:
         logger.error(f"Thruk API timeout: {e}", extra={"username": username})
-        return {"error": "timeout", "message": "Request to Thruk API timed out", "username": username}
+        return {
+            "error": "timeout",
+            "message": "Request to Thruk API timed out",
+            "username": username,
+        }
 
     except httpx.ConnectError as e:
         error_str = str(e)
-        if "CERTIFICATE_VERIFY_FAILED" in error_str or "certificate verify failed" in error_str:
-            logger.error(f"Thruk API SSL certificate verification failed: {e}", extra={"username": username})
+        if (
+            "CERTIFICATE_VERIFY_FAILED" in error_str
+            or "certificate verify failed" in error_str
+        ):
+            logger.error(
+                f"Thruk API SSL certificate verification failed: {e}",
+                extra={"username": username},
+            )
             return {
                 "error": "ssl_verification_failed",
                 "message": (
@@ -243,7 +273,9 @@ async def _api_request(
                 "current_verify_ssl": THRUK_VERIFY_SSL,
             }
         else:
-            logger.error(f"Thruk API connection error: {e}", extra={"username": username})
+            logger.error(
+                f"Thruk API connection error: {e}", extra={"username": username}
+            )
             return {
                 "error": "connection_failed",
                 "message": f"Cannot connect to Thruk at {THRUK_BASE_URL}",
@@ -253,13 +285,23 @@ async def _api_request(
     except httpx.HTTPStatusError as e:
         # Try to get the error message from the response body
         try:
-            error_body = e.response.json() if e.response.headers.get("content-type", "").startswith("application/json") else e.response.text
+            error_body = (
+                e.response.json()
+                if e.response.headers.get("content-type", "").startswith(
+                    "application/json"
+                )
+                else e.response.text
+            )
         except Exception:
             error_body = e.response.text
 
         logger.error(
             f"Thruk API HTTP error: {e.response.status_code} - {error_body}",
-            extra={"username": username, "status_code": e.response.status_code, "response_body": error_body}
+            extra={
+                "username": username,
+                "status_code": e.response.status_code,
+                "response_body": error_body,
+            },
         )
         return {
             "error": "http_error",
@@ -270,13 +312,22 @@ async def _api_request(
         }
 
     except Exception as e:
-        logger.error(f"Unexpected error calling Thruk API: {e}", exc_info=True, extra={"username": username})
-        return {"error": "unexpected_error", "message": f"Unexpected error: {str(e)}", "username": username}
+        logger.error(
+            f"Unexpected error calling Thruk API: {e}",
+            exc_info=True,
+            extra={"username": username},
+        )
+        return {
+            "error": "unexpected_error",
+            "message": f"Unexpected error: {str(e)}",
+            "username": username,
+        }
 
 
 # =============================================================================
 # Host Monitoring Tools
 # =============================================================================
+
 
 @mcp.tool()
 async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
@@ -291,7 +342,7 @@ async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
     """
     logger.info(
         "thruk_list_hosts called",
-        extra={"username": username, "tool": "thruk_list_hosts"}
+        extra={"username": username, "tool": "thruk_list_hosts"},
     )
 
     # Prepare API request details
@@ -307,23 +358,19 @@ async def thruk_list_hosts(username: str = "chatuser") -> dict[str, Any]:
     hosts_data = result["data"]
     logger.info(
         f"Successfully fetched {len(hosts_data)} hosts from Thruk",
-        extra={"username": username, "host_count": len(hosts_data)}
+        extra={"username": username, "host_count": len(hosts_data)},
     )
-    return {
-        "hosts": hosts_data,
-        "count": len(hosts_data),
-        "username": username
-    }
+    return {"hosts": hosts_data, "count": len(hosts_data), "username": username}
 
 
 # =============================================================================
 # Service Monitoring Tools
 # =============================================================================
 
+
 @mcp.tool()
 async def thruk_list_services(
-    hostname: str = "",
-    username: str = "chatuser"
+    hostname: str = "", username: str = "chatuser"
 ) -> dict[str, Any]:
     """
     List services for a specific host or all services.
@@ -340,8 +387,8 @@ async def thruk_list_services(
         extra={
             "username": username,
             "hostname": hostname if hostname else "all hosts",
-            "tool": "thruk_list_services"
-        }
+            "tool": "thruk_list_services",
+        },
     )
 
     # Prepare API request details
@@ -360,19 +407,20 @@ async def thruk_list_services(
     services_data = result["data"]
     logger.info(
         f"Successfully fetched {len(services_data)} services from Thruk",
-        extra={"username": username, "service_count": len(services_data)}
+        extra={"username": username, "service_count": len(services_data)},
     )
     return {
         "services": services_data,
         "count": len(services_data),
         "hostname": hostname if hostname else "all hosts",
-        "username": username
+        "username": username,
     }
 
 
 # =============================================================================
 # Group Management Tools
 # =============================================================================
+
 
 @mcp.tool()
 async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
@@ -381,7 +429,7 @@ async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
     """
     logger.info(
         "thruk_list_hostgroups called",
-        extra={"username": username, "tool": "thruk_list_hostgroups"}
+        extra={"username": username, "tool": "thruk_list_hostgroups"},
     )
 
     # TODO: Implement actual Thruk API call
@@ -394,7 +442,7 @@ async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
     return {
         "hostgroups": [],
         "username": username,
-        "note": "Placeholder - implement Thruk /r/hostgroups API integration"
+        "note": "Placeholder - implement Thruk /r/hostgroups API integration",
     }
 
 
@@ -405,7 +453,7 @@ async def thruk_list_servicegroups(username: str = "chatuser") -> dict[str, Any]
     """
     logger.info(
         "thruk_list_servicegroups called",
-        extra={"username": username, "tool": "thruk_list_servicegroups"}
+        extra={"username": username, "tool": "thruk_list_servicegroups"},
     )
 
     # TODO: Implement actual Thruk API call
@@ -418,13 +466,14 @@ async def thruk_list_servicegroups(username: str = "chatuser") -> dict[str, Any]
     return {
         "servicegroups": [],
         "username": username,
-        "note": "Placeholder - implement Thruk /r/servicegroups API integration"
+        "note": "Placeholder - implement Thruk /r/servicegroups API integration",
     }
 
 
 # =============================================================================
 # Downtime Management Tools
 # =============================================================================
+
 
 @mcp.tool()
 async def thruk_list_downtimes(username: str = "chatuser") -> dict[str, Any]:
@@ -439,7 +488,7 @@ async def thruk_list_downtimes(username: str = "chatuser") -> dict[str, Any]:
     """
     logger.info(
         "thruk_list_downtimes called",
-        extra={"username": username, "tool": "thruk_list_downtimes"}
+        extra={"username": username, "tool": "thruk_list_downtimes"},
     )
 
     # Prepare API request
@@ -455,12 +504,12 @@ async def thruk_list_downtimes(username: str = "chatuser") -> dict[str, Any]:
     downtimes_data = result["data"]
     logger.info(
         f"Successfully fetched {len(downtimes_data)} downtimes from Thruk",
-        extra={"username": username, "downtime_count": len(downtimes_data)}
+        extra={"username": username, "downtime_count": len(downtimes_data)},
     )
     return {
         "downtimes": downtimes_data,
         "count": len(downtimes_data),
-        "username": username
+        "username": username,
     }
 
 
@@ -477,7 +526,7 @@ async def thruk_list_comments(username: str = "chatuser") -> dict[str, Any]:
     """
     logger.info(
         "thruk_list_comments called",
-        extra={"username": username, "tool": "thruk_list_comments"}
+        extra={"username": username, "tool": "thruk_list_comments"},
     )
 
     # Prepare API request
@@ -493,21 +542,18 @@ async def thruk_list_comments(username: str = "chatuser") -> dict[str, Any]:
     comments_data = result["data"]
     logger.info(
         f"Successfully fetched {len(comments_data)} comments from Thruk",
-        extra={"username": username, "comment_count": len(comments_data)}
+        extra={"username": username, "comment_count": len(comments_data)},
     )
     return {
         "comments": comments_data,
         "count": len(comments_data),
-        "username": username
+        "username": username,
     }
 
 
 @mcp.tool()
 async def thruk_schedule_host_downtime(
-    hostname: str,
-    duration_minutes: int,
-    comment: str,
-    username: str = "chatuser"
+    hostname: str, duration_minutes: int, comment: str, username: str = "chatuser"
 ) -> dict[str, Any]:
     """
     Schedule downtime for a specific host.
@@ -527,8 +573,8 @@ async def thruk_schedule_host_downtime(
             "username": username,
             "hostname": hostname,
             "duration_minutes": duration_minutes,
-            "tool": "thruk_schedule_host_downtime"
-        }
+            "tool": "thruk_schedule_host_downtime",
+        },
     )
 
     # Prepare API request
@@ -538,7 +584,7 @@ async def thruk_schedule_host_downtime(
         "end_time": f"+{duration_minutes}m",
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "comment_author": username,  # Thruk expects 'comment_author', not 'author'
-        "fixed": "1"  # Fixed downtime
+        "fixed": "1",  # Fixed downtime
     }
 
     # Call the generic API request handler
@@ -550,7 +596,11 @@ async def thruk_schedule_host_downtime(
 
     logger.info(
         f"Successfully scheduled downtime for host {hostname}",
-        extra={"username": username, "hostname": hostname, "duration_minutes": duration_minutes}
+        extra={
+            "username": username,
+            "hostname": hostname,
+            "duration_minutes": duration_minutes,
+        },
     )
     return {
         "success": True,
@@ -559,7 +609,7 @@ async def thruk_schedule_host_downtime(
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "result": result["data"],
-        "username": username
+        "username": username,
     }
 
 
@@ -569,7 +619,7 @@ async def thruk_schedule_service_downtime(
     service_description: str,
     duration_minutes: int,
     comment: str,
-    username: str = "chatuser"
+    username: str = "chatuser",
 ) -> dict[str, Any]:
     """
     Schedule downtime for a specific service.
@@ -591,13 +641,14 @@ async def thruk_schedule_service_downtime(
             "hostname": hostname,
             "service_description": service_description,
             "duration_minutes": duration_minutes,
-            "tool": "thruk_schedule_service_downtime"
-        }
+            "tool": "thruk_schedule_service_downtime",
+        },
     )
 
     # URL encode service description for URL path
     from urllib.parse import quote
-    service_encoded = quote(service_description, safe='')
+
+    service_encoded = quote(service_description, safe="")
 
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/services/{hostname}/{service_encoded}/cmd/schedule_svc_downtime"
@@ -606,7 +657,7 @@ async def thruk_schedule_service_downtime(
         "end_time": f"+{duration_minutes}m",
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "comment_author": username,  # Thruk expects 'comment_author', not 'author'
-        "fixed": "1"  # Fixed downtime
+        "fixed": "1",  # Fixed downtime
     }
 
     # Call the generic API request handler
@@ -618,7 +669,11 @@ async def thruk_schedule_service_downtime(
 
     logger.info(
         f"Successfully scheduled downtime for service {hostname}/{service_description}",
-        extra={"username": username, "hostname": hostname, "service": service_description}
+        extra={
+            "username": username,
+            "hostname": hostname,
+            "service": service_description,
+        },
     )
     return {
         "success": True,
@@ -628,16 +683,13 @@ async def thruk_schedule_service_downtime(
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "result": result["data"],
-        "username": username
+        "username": username,
     }
 
 
 @mcp.tool()
 async def thruk_schedule_hostgroup_downtime(
-    hostgroup: str,
-    duration_minutes: int,
-    comment: str,
-    username: str = "chatuser"
+    hostgroup: str, duration_minutes: int, comment: str, username: str = "chatuser"
 ) -> dict[str, Any]:
     """
     Schedule downtime for all hosts in a hostgroup.
@@ -657,8 +709,8 @@ async def thruk_schedule_hostgroup_downtime(
             "username": username,
             "hostgroup": hostgroup,
             "duration_minutes": duration_minutes,
-            "tool": "thruk_schedule_hostgroup_downtime"
-        }
+            "tool": "thruk_schedule_hostgroup_downtime",
+        },
     )
 
     # Prepare API request
@@ -668,7 +720,7 @@ async def thruk_schedule_hostgroup_downtime(
         "end_time": f"+{duration_minutes}m",
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "comment_author": username,  # Thruk expects 'comment_author', not 'author'
-        "fixed": "1"  # Fixed downtime
+        "fixed": "1",  # Fixed downtime
     }
 
     # Call the generic API request handler
@@ -680,7 +732,11 @@ async def thruk_schedule_hostgroup_downtime(
 
     logger.info(
         f"Successfully scheduled downtime for hostgroup {hostgroup}",
-        extra={"username": username, "hostgroup": hostgroup, "duration_minutes": duration_minutes}
+        extra={
+            "username": username,
+            "hostgroup": hostgroup,
+            "duration_minutes": duration_minutes,
+        },
     )
     return {
         "success": True,
@@ -689,16 +745,13 @@ async def thruk_schedule_hostgroup_downtime(
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "comment_author": username,  # Thruk expects 'comment_author', not 'author'
         "result": result["data"],
-        "username": username
+        "username": username,
     }
 
 
 @mcp.tool()
 async def thruk_schedule_servicegroup_downtime(
-    servicegroup: str,
-    duration_minutes: int,
-    comment: str,
-    username: str = "chatuser"
+    servicegroup: str, duration_minutes: int, comment: str, username: str = "chatuser"
 ) -> dict[str, Any]:
     """
     Schedule downtime for all services in a servicegroup.
@@ -709,8 +762,8 @@ async def thruk_schedule_servicegroup_downtime(
             "username": username,
             "servicegroup": servicegroup,
             "duration_minutes": duration_minutes,
-            "tool": "thruk_schedule_servicegroup_downtime"
-        }
+            "tool": "thruk_schedule_servicegroup_downtime",
+        },
     )
 
     # Note: This is a placeholder for a future implementation.
@@ -736,7 +789,7 @@ async def thruk_schedule_servicegroup_downtime(
         "duration_minutes": duration_minutes,
         "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
         "username": username,
-        "note": "Placeholder - implement Thruk schedule_servicegroup_downtime command"
+        "note": "Placeholder - implement Thruk schedule_servicegroup_downtime command",
     }
 
 

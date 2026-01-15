@@ -29,7 +29,7 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -44,24 +44,31 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # Try to import OpenAI client (optional dependency)
 try:
     from openai import AsyncOpenAI
+
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-    logger.warning("OpenAI library not installed. OpenAI LLM features will be disabled.")
+    logger.warning(
+        "OpenAI library not installed. OpenAI LLM features will be disabled."
+    )
 
 # Try to import Gemini client (optional dependency)
 try:
     from google import genai
     from google.genai import types
+
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-    logger.warning("Google GenAI library not installed. Gemini features will be disabled.")
+    logger.warning(
+        "Google GenAI library not installed. Gemini features will be disabled."
+    )
 
 # Try to import MCP client (optional dependency)
 try:
     from fastmcp.client import Client
     from fastmcp.client.transports import PythonStdioTransport
+
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
@@ -92,28 +99,31 @@ gemini_client = None
 
 if LLM_PROVIDER == "openai":
     if OPENAI_AVAILABLE and OPENAI_API_KEY:
-        openai_client = AsyncOpenAI(
-            api_key=OPENAI_API_KEY,
-            base_url=OPENAI_BASE_URL
-        )
+        openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
         logger.info(f"OpenAI client initialized: {OPENAI_BASE_URL} / {OPENAI_MODEL}")
     elif OPENAI_AVAILABLE and not OPENAI_API_KEY:
         logger.warning("OPENAI_API_KEY not set. LLM features will be disabled.")
     elif not OPENAI_AVAILABLE:
-        logger.warning("OpenAI library not available. Please install: pip install openai>=1.10.0")
+        logger.warning(
+            "OpenAI library not available. Please install: pip install openai>=1.10.0"
+        )
 elif LLM_PROVIDER == "gemini":
     if GEMINI_AVAILABLE and GEMINI_API_KEY:
         # Build client configuration
         gemini_client = genai.Client(
             api_key=GEMINI_API_KEY,
             vertexai=GEMINI_VERTEXAI,
-            http_options={"base_url": GEMINI_BASE_URL} if GEMINI_BASE_URL else None
+            http_options={"base_url": GEMINI_BASE_URL} if GEMINI_BASE_URL else None,
         )
-        logger.info(f"Gemini client initialized: {GEMINI_BASE_URL or 'cloud'} / {GEMINI_MODEL} (vertexai={GEMINI_VERTEXAI})")
+        logger.info(
+            f"Gemini client initialized: {GEMINI_BASE_URL or 'cloud'} / {GEMINI_MODEL} (vertexai={GEMINI_VERTEXAI})"
+        )
     elif GEMINI_AVAILABLE and not GEMINI_API_KEY:
         logger.warning("GEMINI_API_KEY not set. LLM features will be disabled.")
     elif not GEMINI_AVAILABLE:
-        logger.warning("Google GenAI library not available. Please install: pip install google-genai>=0.3.0")
+        logger.warning(
+            "Google GenAI library not available. Please install: pip install google-genai>=0.3.0"
+        )
 else:
     logger.error(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}. Must be 'openai' or 'gemini'.")
 
@@ -147,10 +157,14 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
         # In OMD, use site's lib/python, not version's lib/python (permission issue)
         if os.getenv("OMD_ROOT"):
             # OMD environment: use site's lib/python directory
-            thruk_mcp_path = os.path.join(os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.join(
+                os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
+            )
         else:
             # Containerized or local: use relative path from chatbot.py
-            thruk_mcp_path = os.path.join(os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.join(
+                os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
+            )
             thruk_mcp_path = os.path.abspath(thruk_mcp_path)
 
         if not os.path.exists(thruk_mcp_path):
@@ -170,10 +184,10 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
             if isinstance(tools_response, list):
                 # Sometimes returns a list directly
                 mcp_tools = tools_response
-            elif hasattr(tools_response, 'result'):
+            elif hasattr(tools_response, "result"):
                 # Usually returns JSONRPCResponse with .result['tools']
-                mcp_tools = tools_response.result['tools']
-            elif hasattr(tools_response, 'tools'):
+                mcp_tools = tools_response.result["tools"]
+            elif hasattr(tools_response, "tools"):
                 # Or might have .tools attribute
                 mcp_tools = tools_response.tools
             else:
@@ -185,28 +199,34 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
             for tool in mcp_tools:
                 # Handle both dict and object formats
                 if isinstance(tool, dict):
-                    name = tool.get('name', '')
-                    description = tool.get('description', '')
-                    parameters = tool.get('inputSchema', {"type": "object", "properties": {}})
+                    name = tool.get("name", "")
+                    description = tool.get("description", "")
+                    parameters = tool.get(
+                        "inputSchema", {"type": "object", "properties": {}}
+                    )
                 else:
                     # Tool object with attributes
-                    name = getattr(tool, 'name', '')
-                    description = getattr(tool, 'description', '')
-                    parameters = getattr(tool, 'inputSchema', {"type": "object", "properties": {}})
+                    name = getattr(tool, "name", "")
+                    description = getattr(tool, "description", "")
+                    parameters = getattr(
+                        tool, "inputSchema", {"type": "object", "properties": {}}
+                    )
 
                 openai_tool = {
                     "type": "function",
                     "function": {
                         "name": name,
                         "description": description,
-                        "parameters": parameters
-                    }
+                        "parameters": parameters,
+                    },
                 }
                 openai_tools.append(openai_tool)
 
             # Cache the tools
             mcp_tools_cache = openai_tools
-            logger.info(f"Cached {len(openai_tools)} MCP tools for LLM function calling")
+            logger.info(
+                f"Cached {len(openai_tools)} MCP tools for LLM function calling"
+            )
 
             return openai_tools
 
@@ -215,7 +235,9 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
         return []
 
 
-async def call_mcp_tool(tool_name: str, arguments: Dict[str, Any], username: str) -> Any:
+async def call_mcp_tool(
+    tool_name: str, arguments: Dict[str, Any], username: str
+) -> Any:
     """
     Call an MCP tool with the given arguments.
 
@@ -239,10 +261,14 @@ async def call_mcp_tool(tool_name: str, arguments: Dict[str, Any], username: str
         # In OMD, use site's lib/python, not version's lib/python (permission issue)
         if os.getenv("OMD_ROOT"):
             # OMD environment: use site's lib/python directory
-            thruk_mcp_path = os.path.join(os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.join(
+                os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
+            )
         else:
             # Containerized or local: use relative path from chatbot.py
-            thruk_mcp_path = os.path.join(os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.join(
+                os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
+            )
             thruk_mcp_path = os.path.abspath(thruk_mcp_path)
 
         if not os.path.exists(thruk_mcp_path):
@@ -267,13 +293,15 @@ async def call_mcp_tool(tool_name: str, arguments: Dict[str, Any], username: str
     except Exception as e:
         logger.error(f"Failed to call MCP tool {tool_name}: {e}")
         import traceback
+
         traceback.print_exc()
         return {"error": str(e)}
+
 
 # Initialize session store
 session_store = SessionStore(
     timeout_minutes=SESSION_TIMEOUT_MINUTES,
-    cleanup_interval_seconds=SESSION_CLEANUP_INTERVAL
+    cleanup_interval_seconds=SESSION_CLEANUP_INTERVAL,
 )
 
 # Templates - support OMD, containerized, and local development environments
@@ -282,7 +310,9 @@ import pathlib
 # Determine template directory based on environment
 if os.getenv("OMD_ROOT"):
     # OMD environment: templates are in $OMD_ROOT/share/chatbot/templates/
-    _templates_dir = pathlib.Path(os.getenv("OMD_ROOT")) / "share" / "chatbot" / "templates"
+    _templates_dir = (
+        pathlib.Path(os.getenv("OMD_ROOT")) / "share" / "chatbot" / "templates"
+    )
 else:
     # Containerized or local development: templates are relative to this file
     _current_dir = pathlib.Path(__file__).parent
@@ -330,7 +360,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if LLM_PROVIDER == "openai" and openai_client:
         logger.info(f"LLM enabled: OpenAI - {OPENAI_MODEL} via {OPENAI_BASE_URL}")
     elif LLM_PROVIDER == "gemini" and gemini_client:
-        logger.info(f"LLM enabled: Gemini - {GEMINI_MODEL} (cloud={not GEMINI_BASE_URL}, vertexai={GEMINI_VERTEXAI})")
+        logger.info(
+            f"LLM enabled: Gemini - {GEMINI_MODEL} (cloud={not GEMINI_BASE_URL}, vertexai={GEMINI_VERTEXAI})"
+        )
     else:
         logger.warning(f"LLM disabled: Provider '{LLM_PROVIDER}' not configured")
 
@@ -371,7 +403,7 @@ app = FastAPI(
     title="Thruk Chatbot",
     description="AI-powered chatbot for Thruk monitoring system",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 
@@ -464,7 +496,7 @@ async def index(request: Request, response: Response) -> HTMLResponse:
 
     logger.info(
         f"New session created for user '{username}'",
-        extra={"session_id": session.session_id[:8], "username": username}
+        extra={"session_id": session.session_id[:8], "username": username},
     )
 
     # Set session cookie
@@ -474,8 +506,8 @@ async def index(request: Request, response: Response) -> HTMLResponse:
         {
             "username": username,
             "session_id": session.session_id[:8],  # Truncated for display
-            "session_timeout_minutes": SESSION_TIMEOUT_MINUTES  # For heartbeat calculation
-        }
+            "session_timeout_minutes": SESSION_TIMEOUT_MINUTES,  # For heartbeat calculation
+        },
     )
 
     # Set HTTP-only cookie for security
@@ -484,7 +516,7 @@ async def index(request: Request, response: Response) -> HTMLResponse:
         value=session.session_id,
         httponly=True,
         samesite="lax",
-        max_age=SESSION_TIMEOUT_MINUTES * 60
+        max_age=SESSION_TIMEOUT_MINUTES * 60,
     )
 
     return response
@@ -510,8 +542,7 @@ async def session_heartbeat(request: Request) -> Dict[str, Any]:
 
     if not session_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No session cookie"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie"
         )
 
     session = session_store.get_session(session_id)
@@ -523,20 +554,21 @@ async def session_heartbeat(request: Request) -> Dict[str, Any]:
             detail={
                 "error": "session_not_found",
                 "message": "Session not found",
-                "session_id": session_id[:8]
-            }
+                "session_id": session_id[:8],
+            },
         )
 
     if session.is_expired():
         from datetime import timedelta
+
         elapsed_seconds = (datetime.now() - session.last_activity).total_seconds()
         logger.warning(
             f"Heartbeat for expired session {session_id[:8]}",
             extra={
                 "elapsed_seconds": elapsed_seconds,
                 "timeout_seconds": session.timeout_minutes * 60,
-                "last_activity": session.last_activity.isoformat()
-            }
+                "last_activity": session.last_activity.isoformat(),
+            },
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -544,19 +576,20 @@ async def session_heartbeat(request: Request) -> Dict[str, Any]:
                 "error": "session_expired",
                 "message": f"Session has ended after {int(elapsed_seconds/60)} minutes of inactivity",
                 "expired_at": datetime.now().isoformat(),
-                "last_activity": session.last_activity.isoformat()
-            }
+                "last_activity": session.last_activity.isoformat(),
+            },
         )
 
     # Update activity
     session.update_activity()
     logger.info(
         f"Heartbeat successful for session {session_id[:8]}",
-        extra={"username": session.username}
+        extra={"username": session.username},
     )
 
     # Calculate time until expiration
     from datetime import timedelta
+
     timeout_delta = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
     elapsed = datetime.now() - session.last_activity
     expires_in = int((timeout_delta - elapsed).total_seconds())
@@ -565,7 +598,7 @@ async def session_heartbeat(request: Request) -> Dict[str, Any]:
         "session_id": session_id[:8],
         "username": session.username,
         "last_activity": session.last_activity.isoformat(),
-        "expires_in_seconds": expires_in
+        "expires_in_seconds": expires_in,
     }
 
 
@@ -587,8 +620,7 @@ async def session_status(request: Request) -> Dict[str, Any]:
 
     if not session_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No session cookie"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie"
         )
 
     session = session_store.get_session(session_id)
@@ -598,8 +630,8 @@ async def session_status(request: Request) -> Dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "error": "session_expired",
-                "message": "Session has ended after inactivity"
-            }
+                "message": "Session has ended after inactivity",
+            },
         )
 
     if session.is_expired():
@@ -608,12 +640,13 @@ async def session_status(request: Request) -> Dict[str, Any]:
             detail={
                 "error": "session_expired",
                 "message": "Session has ended after inactivity",
-                "expired_at": datetime.now().isoformat()
-            }
+                "expired_at": datetime.now().isoformat(),
+            },
         )
 
     # Calculate time until expiration
     from datetime import timedelta
+
     timeout_delta = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
     elapsed = datetime.now() - session.last_activity
     expires_in = int((timeout_delta - elapsed).total_seconds())
@@ -622,11 +655,13 @@ async def session_status(request: Request) -> Dict[str, Any]:
         "session_id": session_id[:8],
         "username": session.username,
         "is_active": session.is_active and not session.is_expired(),
-        "expires_in_seconds": expires_in
+        "expires_in_seconds": expires_in,
     }
 
 
-async def call_llm_openai(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
+async def call_llm_openai(
+    conversation_history: List[Message], username: str
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Call OpenAI-compatible LLM with conversation history and MCP tool support.
     Uses manual tool calling loop.
@@ -644,31 +679,30 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
     if not openai_client:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LLM service not configured. Please set OPENAI_API_KEY."
+            detail="LLM service not configured. Please set OPENAI_API_KEY.",
         )
 
     # Convert conversation history to OpenAI format
     messages = [
-        {"role": msg.role, "content": msg.content}
-        for msg in conversation_history
+        {"role": msg.role, "content": msg.content} for msg in conversation_history
     ]
 
     # Add system message at the beginning
     system_message = {
         "role": "system",
         "content": f"You are a helpful assistant for the Thruk monitoring system. "
-                  f"The current user is: {username}. "
-                  f"You have access to Thruk monitoring tools to query hosts, services, downtimes, and other monitoring data. "
-                  f"Use the available tools when the user asks about monitoring information. "
-                  f"Provide clear, concise answers about monitoring, hosts, services, and related topics.\n\n"
-                  f"IMPORTANT ERROR HANDLING:\n"
-                  f"- If a tool returns an error (e.g., 'error' field in response), YOU MUST report this error to the user clearly.\n"
-                  f"- Never claim success when a tool returned an error.\n"
-                  f"- If an error mentions validation failures or invalid names, explain what was wrong.\n\n"
-                  f"DOWNTIME VERIFICATION:\n"
-                  f"- After scheduling any downtime (host, service, hostgroup, servicegroup), if no error occurred, "
-                  f"immediately call thruk_list_downtimes to verify the downtime was actually created.\n"
-                  f"- Only report success after confirming the downtime appears in the active downtimes list."
+        f"The current user is: {username}. "
+        f"You have access to Thruk monitoring tools to query hosts, services, downtimes, and other monitoring data. "
+        f"Use the available tools when the user asks about monitoring information. "
+        f"Provide clear, concise answers about monitoring, hosts, services, and related topics.\n\n"
+        f"IMPORTANT ERROR HANDLING:\n"
+        f"- If a tool returns an error (e.g., 'error' field in response), YOU MUST report this error to the user clearly.\n"
+        f"- Never claim success when a tool returned an error.\n"
+        f"- If an error mentions validation failures or invalid names, explain what was wrong.\n\n"
+        f"DOWNTIME VERIFICATION:\n"
+        f"- After scheduling any downtime (host, service, hostgroup, servicegroup), if no error occurred, "
+        f"immediately call thruk_list_downtimes to verify the downtime was actually created.\n"
+        f"- Only report success after confirming the downtime appears in the active downtimes list.",
     }
     messages.insert(0, system_message)
 
@@ -682,8 +716,8 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
         call_params = {
             "model": OPENAI_MODEL,
             "messages": messages,
-            "temperature":0.7,
-            "max_tokens": 1000
+            "temperature": 0.7,
+            "max_tokens": 1000,
         }
 
         # Add tools if available
@@ -701,25 +735,28 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
             logger.info(f"LLM requested {len(choice.message.tool_calls)} tool calls")
 
             # Add assistant's tool call message to conversation
-            messages.append({
-                "role": "assistant",
-                "content": choice.message.content,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": choice.message.content,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
                         }
-                    }
-                    for tc in choice.message.tool_calls
-                ]
-            })
+                        for tc in choice.message.tool_calls
+                    ],
+                }
+            )
 
             # Execute each tool call
             for tool_call in choice.message.tool_calls:
                 import json
+
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
 
@@ -729,13 +766,17 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
                 tool_result = await call_mcp_tool(tool_name, tool_args, username)
 
                 # Extract actual data from FastMCP CallToolResult object
-                if hasattr(tool_result, 'data') and tool_result.data:
+                if hasattr(tool_result, "data") and tool_result.data:
                     # Use .data attribute (dict) if available
                     tool_output = tool_result.data
-                elif hasattr(tool_result, 'content') and isinstance(tool_result.content, list) and len(tool_result.content) > 0:
+                elif (
+                    hasattr(tool_result, "content")
+                    and isinstance(tool_result.content, list)
+                    and len(tool_result.content) > 0
+                ):
                     # Extract text from first TextContent object
                     first_content = tool_result.content[0]
-                    if hasattr(first_content, 'text'):
+                    if hasattr(first_content, "text"):
                         # Try to parse as JSON, otherwise use as-is
                         try:
                             tool_output = json.loads(first_content.text)
@@ -743,7 +784,7 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
                             tool_output = first_content.text
                     else:
                         tool_output = str(first_content)
-                elif hasattr(tool_result, 'result'):
+                elif hasattr(tool_result, "result"):
                     # Fallback to .result attribute if present
                     tool_output = tool_result.result
                 else:
@@ -751,24 +792,25 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
                     tool_output = tool_result
 
                 # Add tool result to messages
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(tool_output) if not isinstance(tool_output, str) else tool_output
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": (
+                            json.dumps(tool_output)
+                            if not isinstance(tool_output, str)
+                            else tool_output
+                        ),
+                    }
+                )
 
-                tool_calls_made.append({
-                    "tool": tool_name,
-                    "arguments": tool_args,
-                    "result": tool_output
-                })
+                tool_calls_made.append(
+                    {"tool": tool_name, "arguments": tool_args, "result": tool_output}
+                )
 
             # Make second LLM call with tool results
             response = await openai_client.chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
+                model=OPENAI_MODEL, messages=messages, temperature=0.7, max_tokens=1000
             )
 
             assistant_message = response.choices[0].message.content
@@ -780,7 +822,9 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
         if assistant_message is None:
             assistant_message = ""
 
-        logger.debug(f"LLM response received: {len(assistant_message or '')} characters, {len(tool_calls_made)} tool calls")
+        logger.debug(
+            f"LLM response received: {len(assistant_message or '')} characters, {len(tool_calls_made)} tool calls"
+        )
 
         return assistant_message, tool_calls_made
 
@@ -788,11 +832,13 @@ async def call_llm_openai(conversation_history: List[Message], username: str) ->
         logger.error(f"LLM API error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"LLM API error: {str(e)}"
+            detail=f"LLM API error: {str(e)}",
         )
 
 
-async def call_llm_gemini(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
+async def call_llm_gemini(
+    conversation_history: List[Message], username: str
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Call Google Gemini API with conversation history and MCP tool support.
     Uses automatic function calling (SDK handles tool loop).
@@ -810,7 +856,7 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
     if not gemini_client:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Gemini service not configured. Please set GEMINI_API_KEY."
+            detail="Gemini service not configured. Please set GEMINI_API_KEY.",
         )
 
     # Convert conversation history to Gemini format
@@ -840,14 +886,20 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
         f"- Only report success after confirming the downtime appears in the active downtimes list."
     )
 
-    logger.debug(f"Calling Gemini with conversation history and automatic function calling")
+    logger.debug(
+        f"Calling Gemini with conversation history and automatic function calling"
+    )
 
     try:
         # Find thruk_mcp.py path (same logic as get_mcp_tools)
         if os.getenv("OMD_ROOT"):
-            thruk_mcp_path = os.path.join(os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.join(
+                os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
+            )
         else:
-            thruk_mcp_path = os.path.join(os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py")
+            thruk_mcp_path = os.path.join(
+                os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
+            )
             thruk_mcp_path = os.path.abspath(thruk_mcp_path)
 
         if not os.path.exists(thruk_mcp_path):
@@ -872,8 +924,8 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
                             disable=False
                         ),
                         temperature=0.7,
-                        max_output_tokens=1000
-                    )
+                        max_output_tokens=1000,
+                    ),
                 )
         else:
             # No tools available
@@ -883,8 +935,8 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=0.7,
-                    max_output_tokens=1000
-                )
+                    max_output_tokens=1000,
+                ),
             )
 
         # Extract response text
@@ -896,45 +948,66 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
         tool_calls_made = []
 
         # Try to extract tool usage from response metadata
-        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
             logger.debug(f"Gemini usage metadata: {response.usage_metadata}")
 
         # Log candidates info for debugging
-        if hasattr(response, 'candidates') and response.candidates:
+        if hasattr(response, "candidates") and response.candidates:
             for i, candidate in enumerate(response.candidates):
                 logger.debug(f"Candidate {i}: finish_reason={candidate.finish_reason}")
 
                 # Log all parts in the candidate for debugging
-                if hasattr(candidate, 'content') and hasattr(candidate.content, 'parts'):
-                    logger.debug(f"Candidate {i} has {len(candidate.content.parts)} parts")
+                if hasattr(candidate, "content") and hasattr(
+                    candidate.content, "parts"
+                ):
+                    logger.debug(
+                        f"Candidate {i} has {len(candidate.content.parts)} parts"
+                    )
                     for j, part in enumerate(candidate.content.parts):
                         part_type = type(part).__name__
                         logger.debug(f"  Part {j}: {part_type}")
 
                         # Log function calls if present
-                        if hasattr(part, 'function_call') and part.function_call:
+                        if hasattr(part, "function_call") and part.function_call:
                             logger.info(f"    Function call: {part.function_call.name}")
                             logger.debug(f"    Arguments: {part.function_call.args}")
-                            tool_calls_made.append({
-                                "tool": part.function_call.name,
-                                "arguments": dict(part.function_call.args) if part.function_call.args else {},
-                                "result": "(handled by Gemini SDK)"
-                            })
+                            tool_calls_made.append(
+                                {
+                                    "tool": part.function_call.name,
+                                    "arguments": (
+                                        dict(part.function_call.args)
+                                        if part.function_call.args
+                                        else {}
+                                    ),
+                                    "result": "(handled by Gemini SDK)",
+                                }
+                            )
 
                         # Log function responses if present
-                        if hasattr(part, 'function_response') and part.function_response:
-                            logger.info(f"    Function response: {part.function_response.name}")
-                            logger.debug(f"    Response content: {part.function_response.response}")
+                        if (
+                            hasattr(part, "function_response")
+                            and part.function_response
+                        ):
+                            logger.info(
+                                f"    Function response: {part.function_response.name}"
+                            )
+                            logger.debug(
+                                f"    Response content: {part.function_response.response}"
+                            )
 
                 # Old way (deprecated but keep for compatibility)
-                if hasattr(candidate, 'function_calls') and candidate.function_calls:
-                    logger.info(f"Function calls made (old format): {len(candidate.function_calls)}")
+                if hasattr(candidate, "function_calls") and candidate.function_calls:
+                    logger.info(
+                        f"Function calls made (old format): {len(candidate.function_calls)}"
+                    )
                     for fc in candidate.function_calls:
-                        tool_calls_made.append({
-                            "tool": fc.name,
-                            "arguments": fc.args,
-                            "result": "(handled by Gemini SDK)"
-                        })
+                        tool_calls_made.append(
+                            {
+                                "tool": fc.name,
+                                "arguments": fc.args,
+                                "result": "(handled by Gemini SDK)",
+                            }
+                        )
 
         logger.debug(f"Gemini response received: {len(assistant_message)} characters")
         if tool_calls_made:
@@ -946,11 +1019,13 @@ async def call_llm_gemini(conversation_history: List[Message], username: str) ->
         logger.error(f"Gemini API error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Gemini API error: {str(e)}"
+            detail=f"Gemini API error: {str(e)}",
         )
 
 
-async def call_llm(conversation_history: List[Message], username: str) -> Tuple[str, List[Dict[str, Any]]]:
+async def call_llm(
+    conversation_history: List[Message], username: str
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Call LLM with conversation history and MCP tool support.
     Routes to appropriate provider based on LLM_PROVIDER configuration.
@@ -972,7 +1047,7 @@ async def call_llm(conversation_history: List[Message], username: str) -> Tuple[
     else:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unknown LLM provider: {LLM_PROVIDER}"
+            detail=f"Unknown LLM provider: {LLM_PROVIDER}",
         )
 
 
@@ -1000,8 +1075,7 @@ async def chat(request: Request) -> Dict[str, Any]:
 
     if not session_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No session cookie"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie"
         )
 
     session = session_store.get_session(session_id)
@@ -1019,8 +1093,8 @@ async def chat(request: Request) -> Dict[str, Any]:
                 "error": "session_expired",
                 "message": f"Session has expired after {SESSION_TIMEOUT_MINUTES} minutes of inactivity",
                 "timeout_minutes": SESSION_TIMEOUT_MINUTES,
-                "idle_minutes": idle_minutes
-            }
+                "idle_minutes": idle_minutes,
+            },
         )
 
     # Update activity
@@ -1032,42 +1106,37 @@ async def chat(request: Request) -> Dict[str, Any]:
         user_message = body.get("message", "")
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid request body: {e}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request body: {e}"
         )
 
     if not user_message:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Message cannot be empty"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be empty"
         )
 
     # Add user message to conversation history
-    session.conversation_history.append(
-        Message(role="user", content=user_message)
-    )
+    session.conversation_history.append(Message(role="user", content=user_message))
 
     logger.info(
         f"User message received from {session.username}",
         extra={
             "session_id": session_id[:8],
             "username": session.username,
-            "message_length": len(user_message)
-        }
+            "message_length": len(user_message),
+        },
     )
 
     # Log actual message content at DEBUG level
     logger.debug(
         f"Message content: {user_message}",
-        extra={
-            "session_id": session_id[:8],
-            "username": session.username
-        }
+        extra={"session_id": session_id[:8], "username": session.username},
     )
 
     # Call LLM with conversation history (with MCP tool support)
     try:
-        assistant_response, tool_calls = await call_llm(session.conversation_history, session.username)
+        assistant_response, tool_calls = await call_llm(
+            session.conversation_history, session.username
+        )
     except HTTPException:
         # Re-raise HTTP exceptions (already logged in call_llm)
         raise
@@ -1077,21 +1146,21 @@ async def chat(request: Request) -> Dict[str, Any]:
         # Show detailed errors to omdadmin for debugging
         if session.username == "omdadmin":
             import traceback
+
             error_detail = {
                 "error": "LLM API Error (Admin View)",
                 "type": type(e).__name__,
                 "message": str(e),
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc(),
             }
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=error_detail
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_detail
             )
         else:
             # Generic error for regular users
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An error occurred while processing your request."
+                detail="An error occurred while processing your request.",
             )
 
     # Log assistant response at DEBUG level
@@ -1100,8 +1169,8 @@ async def chat(request: Request) -> Dict[str, Any]:
         extra={
             "session_id": session_id[:8],
             "username": session.username,
-            "tool_calls_made": len(tool_calls)
-        }
+            "tool_calls_made": len(tool_calls),
+        },
     )
 
     # Add assistant response to conversation history
@@ -1110,10 +1179,7 @@ async def chat(request: Request) -> Dict[str, Any]:
             Message(role="assistant", content=assistant_response)
         )
 
-    return {
-        "response": assistant_response,
-        "tool_calls": tool_calls
-    }
+    return {"response": assistant_response, "tool_calls": tool_calls}
 
 
 # Health check endpoint
@@ -1128,16 +1194,17 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "active_sessions": session_store.get_session_count(),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "chatbot:app",
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", "8000")),
         reload=True,
-        log_level="debug"
+        log_level="debug",
     )
