@@ -6,6 +6,7 @@
 # Option A: Using inventory file (recommended)
 cd /path/to/omd-mcp
 sudo ansible-playbook -i ansible/inventory ansible/install-chatbot.yml
+sudo ansible-playbook -i ansible/inventory ansible/install-all.yml
 
 # Option B: Without inventory file
 sudo ansible-playbook -i localhost, -c local ansible/install-chatbot.yml
