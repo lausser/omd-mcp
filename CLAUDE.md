@@ -32,21 +32,32 @@ docker-compose.yml  # Container orchestration
 
 ## Commands
 
+It is strictly forbidden to run any code on the local host,
+Files may be updated and written in the local folder though.
+Testing takes place in a podman container.
+
+You have to run *podman ps* to find the container with image *docker.io/consol/omd-labs-debian:nightly*
+Example:
+086d5d25ad36  docker.io/consol/omd-labs-debian:nightly  
+
+This container has mounted the local folder as /src/omd-mcp.
+You enter the container with *podman exec -it ... bash*
+Then, inside the container you run (as user root):
 ```bash
-# Local development
-cd chatbot && python chatbot.py
-cd thruk_mcp && python thruk_mcp.py --listen 8001
+cd /src/omd-mcp/ansible
+ansible-playbook -i inventory install-all.yml
+```
+This installs the latest versions of chatbot.py and thruk-mcp.py
+Then, still inside the container, you change to the user demo with *su - demo*.
 
-# Container development
-podman compose build
-podman compose up -d
-podman compose logs -f
+```bash
+cd etc/chatbot
+bash install-deps.sh
+omd restart chatbot
+```
 
-# OMD deployment (Ansible)
-cd ansible
-ansible-playbook -i inventory install-all.yml         # Install both chatbot and thruk-mcp
-ansible-playbook -i inventory install-chatbot.yml     # Install only chatbot
-
+If there has never been any activity inside the container and it is completely new:
+```bash
 # Inside OMD site after Ansible deployment
 omd config set THRUK_MCP on
 omd config set CHATBOT on

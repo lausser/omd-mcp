@@ -7,10 +7,10 @@ The chatbot spawns this as a subprocess and communicates via stdin/stdout.
 
 import os
 import sys
-import asyncio
 import logging
 import warnings
 from typing import Any
+from urllib.parse import quote
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 import httpx
@@ -66,7 +66,7 @@ if not THRUK_API_KEY and OMD_ROOT:
 THRUK_VERIFY_SSL = os.getenv("THRUK_VERIFY_SSL", "true").lower() == "true"
 
 # Log configuration status at startup
-logger.info(f"Thruk MCP Server starting...")
+logger.info("Thruk MCP Server starting...")
 logger.info(f"  THRUK_BASE_URL: {THRUK_BASE_URL if THRUK_BASE_URL else 'NOT SET'}")
 logger.info(f"  THRUK_API_KEY: {'SET' if THRUK_API_KEY else 'NOT SET'}")
 logger.info(f"  THRUK_VERIFY_SSL: {THRUK_VERIFY_SSL}")
@@ -78,6 +78,27 @@ logger.info(
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+def create_downtime_data(duration_minutes: int, comment: str, username: str) -> dict:
+    """
+    Create downtime data dictionary for Thruk API.
+
+    Args:
+        duration_minutes: Duration of downtime in minutes
+        comment: Reason for the downtime
+        username: User scheduling the downtime
+
+    Returns:
+        Dictionary with start_time, end_time, comment_data, comment_author, fixed
+    """
+    return {
+        "start_time": "now",
+        "end_time": f"+{duration_minutes}m",
+        "comment_data": comment,
+        "comment_author": username,
+        "fixed": "1",
+    }
 
 
 def filter_sensitive_data(data: Any) -> Any:
@@ -92,32 +113,17 @@ def filter_sensitive_data(data: Any) -> Any:
     Returns:
         Filtered data with sensitive fields removed
     """
+    sensitive_patterns = ["password", "passwd", "secret", "key", "token", "credential"]
+
     if isinstance(data, dict):
-        filtered = {}
-        for key, value in data.items():
-            # Skip custom variables starting with _ that might contain sensitive data
-            key_lower = key.lower()
-            if any(
-                sensitive in key_lower
-                for sensitive in [
-                    "password",
-                    "passwd",
-                    "secret",
-                    "key",
-                    "token",
-                    "credential",
-                ]
-            ):
-                # Don't include sensitive fields
-                continue
-            else:
-                # Recursively filter nested data
-                filtered[key] = filter_sensitive_data(value)
-        return filtered
+        return {
+            k: filter_sensitive_data(v)
+            for k, v in data.items()
+            if not any(sensitive in k.lower() for sensitive in sensitive_patterns)
+        }
     elif isinstance(data, list):
         return [filter_sensitive_data(item) for item in data]
-    else:
-        return data
+    return data
 
 
 @mcp.tool()
@@ -449,11 +455,17 @@ async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
         f"Successfully fetched {len(hostgroups_data)} hostgroups from Thruk",
         extra={"username": username, "hostgroup_count": len(hostgroups_data)},
     )
-    return {"hostgroups": hostgroups_data, "count": len(hostgroups_data), "username": username}
+    return {
+        "hostgroups": hostgroups_data,
+        "count": len(hostgroups_data),
+        "username": username,
+    }
 
 
 @mcp.tool()
-async def thruk_get_hostgroup(hostgroup: str, username: str = "chatuser") -> dict[str, Any]:
+async def thruk_get_hostgroup(
+    hostgroup: str, username: str = "chatuser"
+) -> dict[str, Any]:
     """
     Get details for a specific hostgroup.
 
@@ -466,10 +478,12 @@ async def thruk_get_hostgroup(hostgroup: str, username: str = "chatuser") -> dic
     """
     logger.info(
         "thruk_get_hostgroup called",
-        extra={"username": username, "hostgroup": hostgroup, "tool": "thruk_get_hostgroup"},
+        extra={
+            "username": username,
+            "hostgroup": hostgroup,
+            "tool": "thruk_get_hostgroup",
+        },
     )
-
-    from urllib.parse import quote
 
     hostgroup_encoded = quote(hostgroup, safe="")
     url = f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup_encoded}?columns=name,alias,num_hosts,num_services,hostgroup_members,notes"
@@ -487,7 +501,9 @@ async def thruk_get_hostgroup(hostgroup: str, username: str = "chatuser") -> dic
 
 
 @mcp.tool()
-async def thruk_list_hostgroup_hosts(hostgroup: str, username: str = "chatuser") -> dict[str, Any]:
+async def thruk_list_hostgroup_hosts(
+    hostgroup: str, username: str = "chatuser"
+) -> dict[str, Any]:
     """
     List all hosts that belong to a specific hostgroup.
 
@@ -500,14 +516,18 @@ async def thruk_list_hostgroup_hosts(hostgroup: str, username: str = "chatuser")
     """
     logger.info(
         "thruk_list_hostgroup_hosts called",
-        extra={"username": username, "hostgroup": hostgroup, "tool": "thruk_list_hostgroup_hosts"},
+        extra={
+            "username": username,
+            "hostgroup": hostgroup,
+            "tool": "thruk_list_hostgroup_hosts",
+        },
     )
-
-    from urllib.parse import quote
 
     # Get hostgroup with members list
     hostgroup_encoded = quote(hostgroup, safe="")
-    url = f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup_encoded}?columns=name,alias,members"
+    url = (
+        f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup_encoded}?columns=name,alias,members"
+    )
     result = await _api_request(url=url, username=username)
 
     if not result.get("success"):
@@ -526,7 +546,12 @@ async def thruk_list_hostgroup_hosts(hostgroup: str, username: str = "chatuser")
     hostgroup_name = hostgroup_data.get("name", hostgroup)
 
     if not members:
-        return {"hostgroup": hostgroup_name, "hosts": [], "count": 0, "username": username}
+        return {
+            "hostgroup": hostgroup_name,
+            "hosts": [],
+            "count": 0,
+            "username": username,
+        }
 
     # Fetch status for each member host
     hosts_data = []
@@ -543,9 +568,18 @@ async def thruk_list_hostgroup_hosts(hostgroup: str, username: str = "chatuser")
 
     logger.info(
         f"Successfully fetched {len(hosts_data)} hosts from hostgroup {hostgroup}",
-        extra={"username": username, "hostgroup": hostgroup, "host_count": len(hosts_data)},
+        extra={
+            "username": username,
+            "hostgroup": hostgroup,
+            "host_count": len(hosts_data),
+        },
     )
-    return {"hostgroup": hostgroup_name, "hosts": hosts_data, "count": len(hosts_data), "username": username}
+    return {
+        "hostgroup": hostgroup_name,
+        "hosts": hosts_data,
+        "count": len(hosts_data),
+        "username": username,
+    }
 
 
 @mcp.tool()
@@ -681,13 +715,7 @@ async def thruk_schedule_host_downtime(
 
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/hosts/{hostname}/cmd/schedule_host_downtime"
-    data = {
-        "start_time": "now",
-        "end_time": f"+{duration_minutes}m",
-        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
-        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
-        "fixed": "1",  # Fixed downtime
-    }
+    data = create_downtime_data(duration_minutes, comment, username)
 
     # Call the generic API request handler
     result = await _api_request(url=url, username=username, method="POST", data=data)
@@ -708,8 +736,8 @@ async def thruk_schedule_host_downtime(
         "success": True,
         "hostname": hostname,
         "duration_minutes": duration_minutes,
-        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
-        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
+        "comment_data": comment,
+        "comment_author": username,
         "result": result["data"],
         "username": username,
     }
@@ -748,19 +776,11 @@ async def thruk_schedule_service_downtime(
     )
 
     # URL encode service description for URL path
-    from urllib.parse import quote
-
     service_encoded = quote(service_description, safe="")
 
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/services/{hostname}/{service_encoded}/cmd/schedule_svc_downtime"
-    data = {
-        "start_time": "now",
-        "end_time": f"+{duration_minutes}m",
-        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
-        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
-        "fixed": "1",  # Fixed downtime
-    }
+    data = create_downtime_data(duration_minutes, comment, username)
 
     # Call the generic API request handler
     result = await _api_request(url=url, username=username, method="POST", data=data)
@@ -782,8 +802,8 @@ async def thruk_schedule_service_downtime(
         "hostname": hostname,
         "service_description": service_description,
         "duration_minutes": duration_minutes,
-        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
-        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
+        "comment_data": comment,
+        "comment_author": username,
         "result": result["data"],
         "username": username,
     }
@@ -817,13 +837,7 @@ async def thruk_schedule_hostgroup_downtime(
 
     # Prepare API request
     url = f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup}/cmd/schedule_hostgroup_host_downtime"
-    data = {
-        "start_time": "now",
-        "end_time": f"+{duration_minutes}m",
-        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
-        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
-        "fixed": "1",  # Fixed downtime
-    }
+    data = create_downtime_data(duration_minutes, comment, username)
 
     # Call the generic API request handler
     result = await _api_request(url=url, username=username, method="POST", data=data)
@@ -844,8 +858,8 @@ async def thruk_schedule_hostgroup_downtime(
         "success": True,
         "hostgroup": hostgroup,
         "duration_minutes": duration_minutes,
-        "comment_data": comment,  # Thruk expects 'comment_data', not 'comment'
-        "comment_author": username,  # Thruk expects 'comment_author', not 'author'
+        "comment_data": comment,
+        "comment_author": username,
         "result": result["data"],
         "username": username,
     }

@@ -8,17 +8,18 @@ FastAPI application providing:
 - LLM integration with Thruk MCP tool access
 """
 
+import json
 import os
+import pathlib
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, AsyncIterator, List, Tuple, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from chatbot.session_manager import SessionStore, Message
@@ -35,11 +36,8 @@ logger = logging.getLogger(__name__)
 
 # Suppress noisy DEBUG logs from third-party libraries
 # FastMCP subprocess logs (docket.worker, fakeredis, mcp.server) create excessive log spam
-logging.getLogger("docket.worker").setLevel(logging.WARNING)
-logging.getLogger("fakeredis").setLevel(logging.WARNING)
-logging.getLogger("mcp.server").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+for logger_name in ["docket.worker", "fakeredis", "mcp.server", "httpcore", "httpx"]:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Try to import OpenAI client (optional dependency)
 try:
@@ -136,6 +134,54 @@ mcp_client_available = False  # Whether MCP client can be created
 mcp_tools_cache = []  # Cached list of available MCP tools
 
 
+def get_thruk_mcp_path() -> str:
+    """
+    Get the path to the Thruk MCP server script.
+
+    Returns:
+        Absolute path to thruk_mcp.py
+    """
+    if os.getenv("OMD_ROOT"):
+        thruk_mcp_path = os.path.join(
+            os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
+        )
+    else:
+        thruk_mcp_path = os.path.join(
+            os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
+        )
+        thruk_mcp_path = os.path.abspath(thruk_mcp_path)
+    return thruk_mcp_path
+
+
+def extract_tool_result(tool_result: Any) -> Any:
+    """
+    Extract actual data from FastMCP CallToolResult object.
+
+    Args:
+        tool_result: Result from MCP tool call
+
+    Returns:
+        Extracted data (dict, str, or original object)
+    """
+    if hasattr(tool_result, "data") and tool_result.data:
+        return tool_result.data
+    elif (
+        hasattr(tool_result, "content")
+        and isinstance(tool_result.content, list)
+        and len(tool_result.content) > 0
+    ):
+        first_content = tool_result.content[0]
+        if hasattr(first_content, "text"):
+            try:
+                return json.loads(first_content.text)
+            except (json.JSONDecodeError, AttributeError):
+                return first_content.text
+        return str(first_content)
+    elif hasattr(tool_result, "result"):
+        return tool_result.result
+    return tool_result
+
+
 async def get_mcp_tools() -> List[Dict[str, Any]]:
     """
     Get list of available MCP tools from Thruk MCP server.
@@ -153,19 +199,7 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
         return mcp_tools_cache
 
     try:
-        # Find thruk_mcp.py - it should be in lib/python/thruk_mcp/
-        # In OMD, use site's lib/python, not version's lib/python (permission issue)
-        if os.getenv("OMD_ROOT"):
-            # OMD environment: use site's lib/python directory
-            thruk_mcp_path = os.path.join(
-                os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
-            )
-        else:
-            # Containerized or local: use relative path from chatbot.py
-            thruk_mcp_path = os.path.join(
-                os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
-            )
-            thruk_mcp_path = os.path.abspath(thruk_mcp_path)
+        thruk_mcp_path = get_thruk_mcp_path()
 
         if not os.path.exists(thruk_mcp_path):
             logger.error(f"Thruk MCP server not found at {thruk_mcp_path}")
@@ -257,19 +291,7 @@ async def call_mcp_tool(
         if "username" not in arguments:
             arguments["username"] = username
 
-        # Find thruk_mcp.py - it should be in lib/python/thruk_mcp/
-        # In OMD, use site's lib/python, not version's lib/python (permission issue)
-        if os.getenv("OMD_ROOT"):
-            # OMD environment: use site's lib/python directory
-            thruk_mcp_path = os.path.join(
-                os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
-            )
-        else:
-            # Containerized or local: use relative path from chatbot.py
-            thruk_mcp_path = os.path.join(
-                os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
-            )
-            thruk_mcp_path = os.path.abspath(thruk_mcp_path)
+        thruk_mcp_path = get_thruk_mcp_path()
 
         if not os.path.exists(thruk_mcp_path):
             logger.error(f"Thruk MCP server not found at {thruk_mcp_path}")
@@ -305,8 +327,6 @@ session_store = SessionStore(
 )
 
 # Templates - support OMD, containerized, and local development environments
-import pathlib
-
 # Determine template directory based on environment
 if os.getenv("OMD_ROOT"):
     # OMD environment: templates are in $OMD_ROOT/share/chatbot/templates/
@@ -369,7 +389,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Initialize MCP tools if available (spawns thruk_mcp.py subprocess)
     mcp_tools = []
     if MCP_AVAILABLE:
-        logger.info(f"Initializing MCP client (stdio subprocess)")
+        logger.info("Initializing MCP client (stdio subprocess)")
         try:
             mcp_tools = await get_mcp_tools()
             if mcp_tools:
@@ -559,8 +579,6 @@ async def session_heartbeat(request: Request) -> Dict[str, Any]:
         )
 
     if session.is_expired():
-        from datetime import timedelta
-
         elapsed_seconds = (datetime.now() - session.last_activity).total_seconds()
         logger.warning(
             f"Heartbeat for expired session {session_id[:8]}",
@@ -588,8 +606,6 @@ async def session_heartbeat(request: Request) -> Dict[str, Any]:
     )
 
     # Calculate time until expiration
-    from datetime import timedelta
-
     timeout_delta = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
     elapsed = datetime.now() - session.last_activity
     expires_in = int((timeout_delta - elapsed).total_seconds())
@@ -645,8 +661,6 @@ async def session_status(request: Request) -> Dict[str, Any]:
         )
 
     # Calculate time until expiration
-    from datetime import timedelta
-
     timeout_delta = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
     elapsed = datetime.now() - session.last_activity
     expires_in = int((timeout_delta - elapsed).total_seconds())
@@ -792,30 +806,7 @@ ERROR HANDLING:
                 tool_result = await call_mcp_tool(tool_name, tool_args, username)
 
                 # Extract actual data from FastMCP CallToolResult object
-                if hasattr(tool_result, "data") and tool_result.data:
-                    # Use .data attribute (dict) if available
-                    tool_output = tool_result.data
-                elif (
-                    hasattr(tool_result, "content")
-                    and isinstance(tool_result.content, list)
-                    and len(tool_result.content) > 0
-                ):
-                    # Extract text from first TextContent object
-                    first_content = tool_result.content[0]
-                    if hasattr(first_content, "text"):
-                        # Try to parse as JSON, otherwise use as-is
-                        try:
-                            tool_output = json.loads(first_content.text)
-                        except (json.JSONDecodeError, AttributeError):
-                            tool_output = first_content.text
-                    else:
-                        tool_output = str(first_content)
-                elif hasattr(tool_result, "result"):
-                    # Fallback to .result attribute if present
-                    tool_output = tool_result.result
-                else:
-                    # Last resort: use the object as-is (assume it's already serializable)
-                    tool_output = tool_result
+                tool_output = extract_tool_result(tool_result)
 
                 # Add tool result to messages
                 messages.append(
@@ -899,34 +890,47 @@ async def call_llm_gemini(
     system_instruction = (
         f"You are a helpful assistant for the Thruk monitoring system. "
         f"The current user is: {username}. "
-        f"You have access to Thruk monitoring tools to query hosts, services, downtimes, and other monitoring data. "
+        f"You have access to Thruk monitoring tools to query hosts, services, downtimes, hostgroups, and other monitoring data. "
         f"Use the available tools when the user asks about monitoring information. "
-        f"Provide clear, concise answers about monitoring, hosts, services, and related topics.\n\n"
+        f"Provide clear, concise answers about monitoring, hosts, services, hostgroups, and related topics.\n\n"
         f"IMPORTANT ERROR HANDLING:\n"
         f"- If a tool returns an error (e.g., 'error' field in response), YOU MUST report this error to the user clearly.\n"
         f"- Never claim success when a tool returned an error.\n"
         f"- If an error mentions validation failures or invalid names, explain what was wrong.\n\n"
-        f"DOWNTIME VERIFICATION:\n"
-        f"- After scheduling any downtime (host, service, hostgroup, servicegroup), if no error occurred, "
-        f"immediately call thruk_list_downtimes to verify the downtime was actually created.\n"
-        f"- Only report success after confirming the downtime appears in the active downtimes list."
+        f"DOWNTIME WORKFLOW - CRITICAL:\n"
+        f"When a user asks to schedule downtime for a host or hostgroup:\n\n"
+        f"1. FIRST: Confirm the plan with the user (show affected hosts, duration, comment)\n"
+        f"   - For SINGLE HOST: if request is clear and explicit, you already know the host - do NOT fetch the list first\n"
+        f"   - For HOSTGROUP: always fetch the hostgroup members first using `thruk_list_hostgroup_hosts`, then show the list\n"
+        f"   - Only fetch lists if the request is vague or ambiguous\n\n"
+        f"2. SECOND: Wait for the user to say 'yes', 'confirm', or similar\n\n"
+        f"3. THIRD (CRITICAL): After user confirmation, IMMEDIATELY call the scheduling tool\n"
+        f"   - For single host: call `thruk_schedule_host_downtime`\n"
+        f"   - For hostgroup: call `thruk_schedule_hostgroup_downtime`\n"
+        f"   - DO NOT call list tools again after confirmation\n"
+        f"   - DO NOT ask for more information\n"
+        f"   - Call the scheduling tool immediately\n\n"
+        f"EXAMPLE WORKFLOW - SINGLE HOST:\n"
+        f"User: 'Schedule winsrv03 for 15 minutes with comment Reboot test session'\n"
+        f"You: Show confirmation (winsrv03, 15min, comment, start time), ask 'Is this correct?'\n"
+        f"User: 'yes'\n"
+        f"You: Call `thruk_schedule_host_downtime` immediately (no other tool calls)\n\n"
+        f"EXAMPLE WORKFLOW - HOSTGROUP:\n"
+        f"User: 'Schedule windows-servers for 10 minutes with comment Maintenance window'\n"
+        f"You: Call `thruk_list_hostgroup_hosts(hostgroup='windows-servers')` first\n"
+        f"You: Show confirmation (windows-servers group, list all 5 hosts, 10min, comment, start time)\n"
+        f"User: 'yes'\n"
+        f"You: Call `thruk_schedule_hostgroup_downtime` immediately (no other tool calls)\n\n"
+        f"DO NOT DEVIATE FROM THIS WORKFLOW.\n"
+        f"If you have already confirmed the plan and received confirmation from the user, you MUST call the scheduling tool immediately without any additional validation or information gathering."
     )
 
     logger.debug(
-        f"Calling Gemini with conversation history and automatic function calling"
+        "Calling Gemini with conversation history and automatic function calling"
     )
 
     try:
-        # Find thruk_mcp.py path (same logic as get_mcp_tools)
-        if os.getenv("OMD_ROOT"):
-            thruk_mcp_path = os.path.join(
-                os.getenv("OMD_ROOT"), "lib", "python", "thruk_mcp", "thruk_mcp.py"
-            )
-        else:
-            thruk_mcp_path = os.path.join(
-                os.path.dirname(__file__), "..", "thruk_mcp", "thruk_mcp.py"
-            )
-            thruk_mcp_path = os.path.abspath(thruk_mcp_path)
+        thruk_mcp_path = get_thruk_mcp_path()
 
         if not os.path.exists(thruk_mcp_path):
             logger.error(f"Thruk MCP server not found at {thruk_mcp_path}")
@@ -1020,20 +1024,6 @@ async def call_llm_gemini(
                             logger.debug(
                                 f"    Response content: {part.function_response.response}"
                             )
-
-                # Old way (deprecated but keep for compatibility)
-                if hasattr(candidate, "function_calls") and candidate.function_calls:
-                    logger.info(
-                        f"Function calls made (old format): {len(candidate.function_calls)}"
-                    )
-                    for fc in candidate.function_calls:
-                        tool_calls_made.append(
-                            {
-                                "tool": fc.name,
-                                "arguments": fc.args,
-                                "result": "(handled by Gemini SDK)",
-                            }
-                        )
 
         logger.debug(f"Gemini response received: {len(assistant_message)} characters")
         if tool_calls_made:
@@ -1206,6 +1196,114 @@ async def chat(request: Request) -> Dict[str, Any]:
         )
 
     return {"response": assistant_response, "tool_calls": tool_calls}
+
+
+@app.post("/api/automation")
+async def automation_endpoint(request: Request) -> Dict[str, Any]:
+    """
+    Automation endpoint for prose-based downtime scheduling.
+
+    Accepts unstructured text (e.g., ticket descriptions, alert messages)
+    and uses the LLM to detect outages and schedule appropriate downtimes.
+
+    Request body:
+    {
+        "text": "Ticket INC0012345: winsrv01 is not responding. CPU at 99%. Please schedule 30min downtime.",
+        "username": "servicenow"  # Optional: defaults to "automation"
+    }
+
+    The LLM will:
+    - Extract affected hosts/hostgroups from the text
+    - Detect the appropriate downtime duration
+    - Schedule downtime with ticket number as comment
+    - Return the result
+
+    Returns:
+        Dictionary with scheduling result and LLM response
+    """
+    AUTOMATION_USERNAME = os.getenv("AUTOMATION_USERNAME", "automation")
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid JSON: {e}"
+        )
+
+    text = body.get("text", "").strip()
+    username = body.get("username", AUTOMATION_USERNAME).strip()
+
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="'text' is required"
+        )
+
+    logger.info(
+        f"Automation request from {username}",
+        extra={"username": username, "text_length": len(text)},
+    )
+
+    # Create a synthetic conversation for the LLM
+    automation_prompt = f"""You are an automation assistant for a monitoring system.
+A ticketing/alerting system has sent you this text:
+
+---
+{text}
+---
+
+Your task:
+1. Detect if this is an outage/incident that requires downtime scheduling
+2. Extract affected hosts, hostgroups, or services
+3. Determine appropriate downtime duration (typically 30min for incidents)
+4. Extract ticket/incident number if present
+5. Schedule the downtime with the ticket number as comment
+
+If this is NOT an outage or incident, respond with: "No downtime required"
+
+Otherwise, call the appropriate scheduling tool (thruk_schedule_host_downtime, thruk_schedule_service_downtime, or thruk_schedule_hostgroup_downtime) immediately.
+
+Example response for an incident:
+"Scheduling 30min downtime for winsrv01 with comment INC0012345"
+
+If multiple hosts are affected (e.g., "all windows servers"), schedule hostgroup downtime.
+
+IMPORTANT: Only respond with text - do not ask for confirmation. This is automated."""
+
+    try:
+        # Create a simple conversation and call LLM
+        conversation = [
+            Message(role="user", content=automation_prompt),
+        ]
+
+        assistant_response, tool_calls = await call_llm(conversation, username)
+
+        logger.info(
+            f"Automation completed for {username}",
+            extra={
+                "username": username,
+                "tool_calls_made": len(tool_calls),
+            },
+        )
+
+        return {
+            "success": True,
+            "username": username,
+            "text": text,
+            "response": assistant_response,
+            "tool_calls": tool_calls,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Automation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "automation_failed",
+                "message": str(e),
+            },
+        )
 
 
 # Health check endpoint

@@ -1,5 +1,5 @@
 # Core Web Framework (Python 3.11+)
-fastapi>=0.110.0
+fastapi>=0.128.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.9
 
