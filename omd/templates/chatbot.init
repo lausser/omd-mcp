@@ -84,8 +84,92 @@ export THRUK_BASE_URL
 
 mkdir -p "$LOG_DIR"
 
+# Check if uvicorn is available
+if ! command -v $DAEMON &>/dev/null; then
+    echo "ERROR: uvicorn not found at $DAEMON"
+    echo "Please install dependencies: cd /omd/sites/demo/lib/python/chatbot && ./install-deps.sh"
+    echo "Or manually: python3 -m pip install fastapi>=0.65.0 uvicorn>=0.15.0 python-multipart"
+    exit 1
+fi
+
 # Build uvicorn command options
 OPTS="chatbot.chatbot:app --host $CHATBOT_HOST --port $CHATBOT_PORT --log-level info"
 
-# Call the generic init function
-__generic_init "$@"
+__init_hook $0 $1 pre
+case "$1" in
+  start)
+    printf '%s' "Starting chatbot..."
+    if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+      echo "already running"
+      exit 0
+    fi
+    mkdir -p "$(dirname "$PID_FILE")"
+    nohup $DAEMON $OPTS >> "$LOG_FILE" 2>&1 &
+    PID=$!
+    echo $PID > "$PID_FILE"
+    sleep 1
+    if kill -0 $PID 2>/dev/null; then
+      echo "OK"
+      __init_hook $0 $1 post 0
+      exit 0
+    else
+      echo "FAILED"
+      rm -f "$PID_FILE"
+      __init_hook $0 $1 post 1
+      exit 1
+    fi
+  ;;
+  stop)
+    printf '%s' "Stopping chatbot..."
+    if [ -f "$PID_FILE" ]; then
+      PID=$(cat "$PID_FILE")
+      if kill -0 $PID 2>/dev/null; then
+        kill $PID
+        for i in $(seq 30); do
+          if ! kill -0 $PID 2>/dev/null; then
+            rm -f "$PID_FILE"
+            echo "OK"
+            __init_hook $0 $1 post 0
+            exit 0
+          fi
+          sleep 0.1
+        done
+        echo "timeout"
+        __init_hook $0 $1 post 1
+        exit 1
+      else
+        rm -f "$PID_FILE"
+        echo "not running"
+        exit 0
+      fi
+    else
+      echo "not running"
+      exit 0
+    fi
+  ;;
+  status)
+    if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+      echo "chatbot is running ($(cat $PID_FILE))"
+      exit 0
+    else
+      echo "chatbot is NOT running"
+      exit 1
+    fi
+  ;;
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+  ;;
+  reload)
+    echo "Reloading chatbot..."
+    $0 stop
+    $0 start
+  ;;
+  check)
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|reload|status}"
+    exit 1
+  ;;
+esac

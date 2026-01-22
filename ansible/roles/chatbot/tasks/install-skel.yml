@@ -54,10 +54,19 @@
   copy:
     src: "{{ chatbot_repo }}/omd/templates/chatbot.init"
     dest: "{{ omd_root }}/skel/etc/init.d/chatbot"
-    mode: '0755'
+    mode: '0644'
     owner: root
     group: root
   tags: [skel, init]
+
+- name: Set etc/init.d/chatbot permissions 
+  blockinfile:
+    path: /omd/versions/default/share/omd/skel.permissions
+    marker: "# {mark} ANSIBLE MANAGED BLOCK -->"
+    insertafter: EOF
+    block: |
+      # chatbot
+      etc/init.d/chatbot 0755
 
 - name: Create rc.d symlink in skel
   file:

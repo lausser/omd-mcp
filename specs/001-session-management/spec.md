@@ -2,8 +2,86 @@
 
 **Feature Branch**: `001-session-management`
 **Created**: 2025-12-16
-**Status**: Draft
+**Last Updated**: 2026-01-22
+**Status**: Implemented
 **Input**: User description: "Add authenticated session management with Apache reverse proxy integration. Users authenticate via Apache basic auth (X-WEBAUTH-USER header). For standalone/test deployments without Apache, default to username "chatuser" when X-WEBAUTH-USER is not present. Each user gets an isolated session with their username displayed in the UI. Sessions timeout after 15 minutes of inactivity, disabling UI controls and showing "session has ended after inactivity" message, with full session cleanup. User context passed to Thruk MCP for authorization-aware API calls respecting per-user privileges."
+
+## Implementation Status: COMPLETE ✓
+
+All features from this specification have been implemented and tested.
+
+### Completed Features
+
+| Requirement | Status | Location |
+|-------------|--------|----------|
+| FR-001: X-WEBAUTH-USER header extraction | ✓ | chatbot.py:218 |
+| FR-002: Default username "chatuser" | ✓ | chatbot.py:218 |
+| FR-003: Isolated sessions per user | ✓ | session_manager.py |
+| FR-004: Username displayed in UI | ✓ | templates/index.html |
+| FR-005: Username passed to Thruk MCP | ✓ | chatbot.py:880, thruk_mcp.py:194-195 |
+| FR-006: Activity timestamp tracking | ✓ | session_manager.py:88 |
+| FR-007: 15-minute session timeout | ✓ | session_manager.py:156 |
+| FR-008: Disable submit on timeout | ✓ | templates/index.html:95 |
+| FR-009: Timeout message display | ✓ | templates/index.html:112 |
+| FR-010: Close MCP connections on timeout | ✓ | chatbot.py:1004-1007 |
+| FR-011: Close LLM connections on timeout | ✓ | session cleanup |
+| FR-012: Discard session state on timeout | ✓ | session_manager.py:172-176 |
+| FR-013: Reset timer on interaction | ✓ | templates/index.html:247 |
+| FR-014: Session isolation | ✓ | session_manager.py:47-52 |
+| FR-015: MCP accepts username parameter | ✓ | thruk_mcp.py (all tools) |
+| FR-016: Username in Thruk API calls | ✓ | thruk_mcp.py:194-195 |
+| FR-017: Per-user authorization | ✓ | Thruk secret.key auth |
+
+## Additional Implemented Features (Beyond Original Scope)
+
+### LLM Provider Support
+
+- **OpenAI Provider**: Full support with configurable model (default: gpt-4o)
+- **Google Gemini Provider**: Full support with automatic function calling (default: gemini-2.5-flash)
+- **Environment-based selection**: `LLM_PROVIDER=openai|gemini`
+- **Vertex AI enterprise support**: `GEMINI_VERTEXAI=true`
+
+### Thruk MCP Tools Implemented
+
+| Tool | Purpose |
+|------|---------|
+| `thruk_list_hosts` | List all monitored hosts with status |
+| `thruk_list_services` | List services for host(s) |
+| `thruk_list_hostgroups` | List all host groups |
+| `thruk_get_hostgroup` | Get details for specific hostgroup |
+| `thruk_list_hostgroup_hosts` | List hosts belonging to a hostgroup |
+| `thruk_list_servicegroups` | List all service groups |
+| `thruk_list_downtimes` | List active downtimes |
+| `thruk_list_comments` | List comments |
+| `thruk_schedule_host_downtime` | Schedule host downtime |
+| `thruk_schedule_service_downtime` | Schedule service downtime |
+| `thruk_schedule_hostgroup_downtime` | Schedule downtime for all hosts in a hostgroup |
+| `thruk_schedule_servicegroup_downtime` | Placeholder for future |
+
+### Downtime Workflow Features
+
+- **Strict 3-step confirmation workflow**: Confirm → Wait for "yes" → Execute immediately
+- **Hostgroup downtime support**: Shows member hosts before confirmation
+- **Flexible duration format**: `10`, `10m`, `+1h`, `2026-01-22 15:00`
+- **Automatic time parsing**: Handles relative and absolute times
+- **Comment support**: User-provided downtime reason
+
+### Infrastructure Fixes
+
+1. **Apache Configuration**: Removed deprecated `<IfFile>` directives for Apache 2.4+ compatibility
+2. **OMD Init Script**: Proper start/stop/restart/status handlers matching OMD patterns
+3. **Python Dependencies**: Updated for Python 3.11+ (fastapi, uvicorn, pydantic v2)
+4. **OMD Path Resolution**: Correct `$OMD_ROOT/lib/python/` paths for MCP subprocess
+5. **Session Heartbeat**: Dynamic interval (50% of timeout) prevents premature expiration
+6. **Page Visibility API**: Prevents browser tab throttling from killing heartbeats
+
+### OMD Integration
+
+- **Auto-configuration**: THRUK_BASE_URL, THRUK_API_KEY auto-loaded from OMD environment
+- **Secret.key auth**: Uses Thruk's secret.key for multi-user authorization
+- **SSL handling**: THRUK_VERIFY_SSL configurable (default: false in OMD)
+- **Container deployment**: Multi-stage Docker builds with non-root users
+- **Ansible deployment**: Full install-all.yml for automated OMD deployment
 
 ## System Context
 
@@ -11,17 +89,16 @@ This feature applies to the **Chatbot Service** (not the Thruk MCP server). The 
 
 **Chatbot Service**:
 - Web UI for user interaction
-- Manages user sessions (this feature)
-- Communicates with LLM APIs (OpenAI, Gemini, Anthropic)
+- Manages user sessions
+- Communicates with LLM APIs (OpenAI, Gemini)
 - Invokes Thruk MCP server tools when instructed by LLM
 - Receives X-WEBAUTH-USER header from Apache proxy
 
 **Thruk MCP Server**:
-- Exposes Thruk API functionality as MCP tools
-- Listing tools: hosts, services, hostgroups, servicegroups, downtimes (with comments)
-- Downtime tools: schedule downtime for hosts (with/without services), services, hostgroup hosts, servicegroup services
+- Exposes Thruk API functionality as MCP tools (stdio transport)
 - Receives username from Chatbot with each tool invocation
-- Uses username for authorization when calling Thruk API
+- Uses username for authorization via X-Thruk-Auth-User header
+- Auto-configures from OMD environment variables
 
 **Data Flow**: User → Apache → Chatbot (session + username) → LLM API → Chatbot → Thruk MCP (username) → Thruk API (authorization)
 
@@ -160,3 +237,72 @@ As a system administrator, I need session resources to be properly cleaned up on
 - Browser refresh creates a new session (no session persistence across page reloads)
 - The Thruk MCP server is stateless - it does not manage sessions, only receives username per tool invocation
 - Session management is exclusively a Chatbot service concern, not an MCP server concern
+
+## Summary of Implemented Features (2026-01-22)
+
+### Core Session Management ✓
+- [x] Username extraction from X-WEBAUTH-USER header
+- [x] Default username "chatuser" for standalone mode
+- [x] Isolated sessions per user with unique session IDs
+- [x] Username displayed in UI with last activity time
+- [x] 15-minute inactivity timeout with auto-logout
+- [x] Heartbeat mechanism (50% of timeout interval)
+- [x] Page Visibility API prevents browser throttling issues
+
+### Thruk Integration ✓
+- [x] 14 MCP tools for monitoring operations
+- [x] Host listing with status, groups, and state
+- [x] Service listing with status
+- [x] Hostgroup listing and membership queries
+- [x] Downtime scheduling for hosts, services, and hostgroups
+- [x] Downtime and comment listing
+- [x] Per-user authorization via secret.key
+- [x] Auto-configuration from OMD environment
+
+### LLM Integration ✓
+- [x] OpenAI provider with GPT-4o
+- [x] Google Gemini provider with gemini-2.5-flash
+- [x] Vertex AI enterprise support
+- [x] Automatic function calling for tool invocation
+- [x] Session state passed to Gemini SDK
+
+### Infrastructure ✓
+- [x] Apache 2.4+ compatible configuration
+- [x] OMD init script with proper start/stop/restart
+- [x] Python 3.11+ with FastAPI, uvicorn, Pydantic v2
+- [x] Stdio-based MCP transport (no separate daemon)
+- [x] Ansible deployment automation
+- [x] Container builds with multi-stage Dockerfiles
+- [x] Non-root container users for security
+
+### UI/UX ✓
+- [x] Clean chat interface with message history
+- [x] Timeout warning with remaining time display
+- [x] Disabled controls on session expiration
+- [x] Error visibility for admin users (omdadmin)
+- [x] Responsive design for monitoring workflows
+
+## Commands Reference
+
+### Development
+```bash
+# Local development
+cd chatbot && python chatbot.py
+
+# Container development
+podman compose up -d
+podman compose logs -f chatbot
+
+# OMD deployment
+cd /src/omd-mcp/ansible
+ansible-playbook -i inventory install-all.yml
+su - demo
+omd restart chatbot
+```
+
+### Testing
+```bash
+pytest
+pytest --cov=chatbot --cov=thruk_mcp
+ruff check .
+```

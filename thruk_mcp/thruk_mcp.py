@@ -426,24 +426,126 @@ async def thruk_list_services(
 async def thruk_list_hostgroups(username: str = "chatuser") -> dict[str, Any]:
     """
     List all host groups visible to the user.
+
+    Args:
+        username: User session username for authorization (default: chatuser)
+
+    Returns:
+        List of hostgroups with their details
     """
     logger.info(
         "thruk_list_hostgroups called",
         extra={"username": username, "tool": "thruk_list_hostgroups"},
     )
 
-    # TODO: Implement actual Thruk API call
-    # url = f"{THRUK_BASE_URL}/r/hostgroups"
-    # result = await _api_request(url=url, username=username)
-    # if result.get("success"):
-    #     return {"hostgroups": result["data"], "username": username}
-    # return result
+    url = f"{THRUK_BASE_URL}/r/hostgroups?columns=name,alias,num_hosts,num_services"
+    result = await _api_request(url=url, username=username)
 
-    return {
-        "hostgroups": [],
-        "username": username,
-        "note": "Placeholder - implement Thruk /r/hostgroups API integration",
-    }
+    if not result.get("success"):
+        return result
+
+    hostgroups_data = result["data"]
+    logger.info(
+        f"Successfully fetched {len(hostgroups_data)} hostgroups from Thruk",
+        extra={"username": username, "hostgroup_count": len(hostgroups_data)},
+    )
+    return {"hostgroups": hostgroups_data, "count": len(hostgroups_data), "username": username}
+
+
+@mcp.tool()
+async def thruk_get_hostgroup(hostgroup: str, username: str = "chatuser") -> dict[str, Any]:
+    """
+    Get details for a specific hostgroup.
+
+    Args:
+        hostgroup: Name of the hostgroup to query
+        username: User session username for authorization (default: chatuser)
+
+    Returns:
+        Hostgroup details including members, num_hosts, num_services
+    """
+    logger.info(
+        "thruk_get_hostgroup called",
+        extra={"username": username, "hostgroup": hostgroup, "tool": "thruk_get_hostgroup"},
+    )
+
+    from urllib.parse import quote
+
+    hostgroup_encoded = quote(hostgroup, safe="")
+    url = f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup_encoded}?columns=name,alias,num_hosts,num_services,hostgroup_members,notes"
+    result = await _api_request(url=url, username=username)
+
+    if not result.get("success"):
+        return result
+
+    hostgroup_data = result["data"]
+    logger.info(
+        f"Successfully fetched hostgroup {hostgroup}",
+        extra={"username": username, "hostgroup": hostgroup},
+    )
+    return {"hostgroup": hostgroup_data, "username": username}
+
+
+@mcp.tool()
+async def thruk_list_hostgroup_hosts(hostgroup: str, username: str = "chatuser") -> dict[str, Any]:
+    """
+    List all hosts that belong to a specific hostgroup.
+
+    Args:
+        hostgroup: Name of the hostgroup to query
+        username: User session username for authorization (default: chatuser)
+
+    Returns:
+        List of hosts in the hostgroup with their status
+    """
+    logger.info(
+        "thruk_list_hostgroup_hosts called",
+        extra={"username": username, "hostgroup": hostgroup, "tool": "thruk_list_hostgroup_hosts"},
+    )
+
+    from urllib.parse import quote
+
+    # Get hostgroup with members list
+    hostgroup_encoded = quote(hostgroup, safe="")
+    url = f"{THRUK_BASE_URL}/r/hostgroups/{hostgroup_encoded}?columns=name,alias,members"
+    result = await _api_request(url=url, username=username)
+
+    if not result.get("success"):
+        return result
+
+    # API returns a list for single hostgroup requests
+    hostgroup_list = result["data"]
+    if isinstance(hostgroup_list, list) and len(hostgroup_list) > 0:
+        hostgroup_data = hostgroup_list[0]
+    elif isinstance(hostgroup_list, dict):
+        hostgroup_data = hostgroup_list
+    else:
+        return {"hostgroup": hostgroup, "hosts": [], "count": 0, "username": username}
+
+    members = hostgroup_data.get("members", [])
+    hostgroup_name = hostgroup_data.get("name", hostgroup)
+
+    if not members:
+        return {"hostgroup": hostgroup_name, "hosts": [], "count": 0, "username": username}
+
+    # Fetch status for each member host
+    hosts_data = []
+    for member in members:
+        host_url = f"{THRUK_BASE_URL}/r/hosts/{quote(member, safe='')}?columns=name,alias,address,state,plugin_output,last_check,acknowledged,scheduled_downtime_depth"
+        host_result = await _api_request(url=host_url, username=username)
+        if host_result.get("success") and host_result.get("data"):
+            # host_result["data"] is a single host object, wrap in list
+            host_data = host_result["data"]
+            if isinstance(host_data, list) and len(host_data) > 0:
+                hosts_data.append(host_data[0])
+            elif isinstance(host_data, dict):
+                hosts_data.append(host_data)
+
+    logger.info(
+        f"Successfully fetched {len(hosts_data)} hosts from hostgroup {hostgroup}",
+        extra={"username": username, "hostgroup": hostgroup, "host_count": len(hosts_data)},
+    )
+    return {"hostgroup": hostgroup_name, "hosts": hosts_data, "count": len(hosts_data), "username": username}
 
 
 @mcp.tool()
