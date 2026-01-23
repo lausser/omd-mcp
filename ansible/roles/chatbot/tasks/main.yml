@@ -5,6 +5,10 @@
   include_tasks: install-hooks.yml
   tags: [hooks]
 
+- name: Install Thruk configuration
+  include_tasks: install-thruk-config.yml
+  tags: [thruk-config]
+
 - name: Install shared code and templates
   include_tasks: install-shared.yml
   tags: [shared, code]

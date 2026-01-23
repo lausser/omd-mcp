@@ -1,0 +1,7 @@
+<!-- Chatbot plugin content - iframe within Thruk layout -->
+[% PROCESS _header.tt %]
+[% PROCESS _message.tt %]
+
+<div class="chatbot-wrapper" style="width: 100%; height: calc(100vh - 180px);">
+    <iframe src="[% chatbot_url %]" style="width: 100%; height: 100%; border: none;" frameborder="0"></iframe>
+</div>

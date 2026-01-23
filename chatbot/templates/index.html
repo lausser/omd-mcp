@@ -566,32 +566,24 @@
         // Start heartbeat interval
         heartbeatIntervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
 
-        // Page Visibility API - handle browser tab throttling
-        let lastVisibilityChange = Date.now();
-        let wasHidden = false;
-
-        document.addEventListener('visibilitychange', async function() {
-            const now = Date.now();
-            const hiddenDuration = now - lastVisibilityChange;
-
-            if (document.hidden) {
-                // Tab became hidden
-                wasHidden = true;
-                console.log('Tab hidden - browser may throttle heartbeat interval');
-            } else {
-                // Tab became visible
-                console.log(`Tab visible again after ${Math.round(hiddenDuration/1000)} seconds`);
-
-                if (wasHidden) {
-                    // Send immediate heartbeat to keep session alive
-                    console.log('Sending immediate heartbeat after tab was hidden');
-                    await sendHeartbeat();
-                    wasHidden = false;
+        // Detect iframe mode and adjust layout
+        // When embedded in Thruk main frame, adjust container sizing
+        (function() {
+            const isIframe = window !== window.parent ||
+                             new URLSearchParams(window.location.search).get('iframe') === 'true';
+            if (isIframe) {
+                console.log('Running in iframe mode - adjusting layout');
+                const container = document.querySelector('.container');
+                const chatContainer = document.querySelector('.chat-container');
+                if (container) {
+                    container.style.height = 'calc(100vh - 20px)';
+                    container.style.maxHeight = 'none';
+                }
+                if (chatContainer) {
+                    chatContainer.style.height = 'calc(100% - 130px)';
                 }
             }
-
-            lastVisibilityChange = now;
-        });
+        })();
 
         // Check session status on page load
         async function checkSessionStatus() {

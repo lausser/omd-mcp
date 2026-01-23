@@ -1,0 +1,17 @@
+##########################################################
+
+=head2 add_routes
+
+page: /thruk/cgi-bin/chatbot.cgi
+
+=cut
+
+$routes->{'/thruk/cgi-bin/chatbot.cgi'} = 'Thruk::Controller::chatbot::index';
+
+# add new menu item
+Thruk::Utils::Menu::insert_item('System', {
+                                'href'  => '/thruk/cgi-bin/chatbot.cgi',
+                                'name'  => 'Chatbot',
+                                'icon'  => 'uil-chat',
+});
+

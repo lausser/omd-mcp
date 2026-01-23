@@ -1,0 +1,41 @@
+---
+# Install Thruk configuration for chatbot integration
+
+- name: Create thruk config directory
+  file:
+    path: "{{ omd_root }}/etc/thruk"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  tags: [thruk-config]
+
+- name: Copy thruk_local.conf
+  copy:
+    src: "{{ chatbot_repo }}/ansible/roles/chatbot/files/etc/thruk/thruk_local.conf"
+    dest: "{{ omd_root }}/etc/thruk/thruk_local.conf"
+    mode: '0644'
+    owner: root
+    group: root
+  tags: [thruk-config]
+
+- name: Create plugins share directory
+  file:
+    path: "{{ omd_root }}/share/thruk/plugins/plugins-available/chatbot"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  tags: [thruk-config, chatbot-plugin]
+
+- name: Copy chatbot plugin files
+  copy:
+    src: "{{ chatbot_repo }}/ansible/roles/chatbot/files/etc/thruk/plugins/plugins-available/chatbot/"
+    dest: "{{ omd_root }}/share/thruk/plugins/plugins-available/chatbot/"
+    mode: '0644'
+    owner: root
+    group: root
+    directory_mode: '0755'
+  tags: [thruk-config, chatbot-plugin]
+
+# Plugin symlink is created by OMD hook when 'omd config enable CHATBOT' is run

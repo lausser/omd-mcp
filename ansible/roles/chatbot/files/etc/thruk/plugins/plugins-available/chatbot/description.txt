@@ -1,0 +1,3 @@
+The Chatbot plugin integrates an AI-powered chatbot into Thruk.
+
+Url: chatbot.cgi
