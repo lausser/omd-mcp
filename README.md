@@ -109,47 +109,34 @@ The chatbot includes robust session management with configurable timeouts and au
 - `LOG_LEVEL`: Logging level - DEBUG, INFO, WARNING, ERROR (default: INFO)
 - `THRUK_VERIFY_SSL`: SSL certificate verification (default: true, false in OMD for self-signed certs)
 
-### 2. Run with Podman Compose
+### 2. Run with Podman
 
 ```bash
-# Build and start both services
-podman compose build
-podman compose up -d
+# Start an OMD container
+podman run --rm -it \
+    -p 8443:443 \
+    -v `pwd`:/src/omd-mcp \
+    --entrypoint \
+    bash docker.io/consol/omd-labs-debian:nightly 
+\# /usr/sbin/apache2ctl -D FOREGROUND
 
-# View logs
-podman compose logs -f
+# Install the chatbot in container 1234567890
+podman exec -it 1234567890 bash
+\# omd rm demo
+\# cd /src/omd-mcp/ansible
+\# ansible-playbook -i inventory install-all.yml
+\# omd create demo
 
-# View specific service logs
-podman compose logs -f chatbot
-podman compose logs -f thruk-mcp
-
-# Check status
-podman compose ps
+# Enable the chatbot and add openai-compatible url and token
+podman exec -it 1234567890 bash
+\# su - demo
+\$ omd config set CHATBOT on
+\$ edit etc/chatbot/chatbot.conf
+\$ omd restart
 
 # Access the chatbot UI
-http://localhost:8000
+https://localhost:8443/demo/chatbot
 
-# Access MCP SSE endpoint (for debugging)
-http://localhost:8001/sse
-```
-
-### 3. Run with Docker Compose
-
-```bash
-# Same commands, just use 'docker' instead of 'podman'
-docker compose build
-docker compose up -d
-docker compose logs -f
-```
-
-### 4. Stop Services
-
-```bash
-# Stop all services
-podman compose down
-
-# Stop and remove volumes (if any)
-podman compose down -v
 ```
 
 ## 🔐 Session Management
