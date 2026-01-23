@@ -118,21 +118,21 @@ podman run --rm -it \
     -v `pwd`:/src/omd-mcp \
     --entrypoint \
     bash docker.io/consol/omd-labs-debian:nightly 
-\# /usr/sbin/apache2ctl -D FOREGROUND
+root@1234567890:/# /usr/sbin/apache2ctl -D FOREGROUND
 
-# Install the chatbot in container 1234567890
+# Install the chatbot in 1234567890 1234567890
 podman exec -it 1234567890 bash
-\# omd rm demo
-\# cd /src/omd-mcp/ansible
-\# ansible-playbook -i inventory install-all.yml
-\# omd create demo
+root@1234567890:/# omd rm demo
+root@1234567890:/# cd /src/omd-mcp/ansible
+root@1234567890:/# ansible-playbook -i inventory install-all.yml
+root@1234567890:/# omd create demo
 
 # Enable the chatbot and add openai-compatible url and token
 podman exec -it 1234567890 bash
-\# su - demo
-\$ omd config set CHATBOT on
-\$ edit etc/chatbot/chatbot.conf
-\$ omd restart
+root@1234567890:/# su - demo
+OMD[demo@1234567890]:~$ omd config set CHATBOT on
+OMD[demo@1234567890]:~$ edit etc/chatbot/chatbot.conf
+OMD[demo@1234567890]:~$ omd restart
 
 # Access the chatbot UI
 https://localhost:8443/demo/chatbot
